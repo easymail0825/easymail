@@ -22,8 +22,7 @@ type Server struct {
 	family  string
 	address string
 	// atomic counter for cuid
-	count          int64
-	accountService *account.Service
+	count int64
 }
 
 func New(family, address string) *Server {
@@ -37,9 +36,8 @@ func New(family, address string) *Server {
 	}
 
 	return &Server{
-		family:         family,
-		address:        address,
-		accountService: account.NewService(),
+		family:  family,
+		address: address,
 	}
 }
 
@@ -201,7 +199,7 @@ func (s *Server) Handle(conn net.Conn) (err error) {
 		password := string(authPair[2])
 
 		// authorize username with the password
-		err = s.accountService.Authorize(sess.username, password)
+		_, err = account.Authorize(sess.username, password)
 		if err != nil {
 			data["error"] = "invalid username or password"
 			_ = sess.sendData(false, data)

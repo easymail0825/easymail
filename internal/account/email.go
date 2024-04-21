@@ -1,6 +1,7 @@
 package account
 
 import (
+	"gorm.io/gorm"
 	"time"
 )
 
@@ -27,7 +28,28 @@ type Email struct {
 	Size       int64      `gorm:"default 0"`
 	FolderId   int64      `gorm:"not null;default 0"`
 	ReadStatus ReadStatus `gorm:"not null;default 0"`
-	IsDeleted  bool       `gorm:"not null;default false"`
+	Deleted    bool       `gorm:"not null;default false"`
 	DeleteTime time.Time
 	Identity   string `gorm:"not null"`
+}
+
+func GetMailQuantity(accountId int64) (total int64, err error) {
+	err = db.Model(&Email{}).Where("account_id = ?", accountId).Count(&total).Error
+	return
+}
+
+func GetMailUsage(accountId int64) (total int64, err error) {
+	err = db.Model(&Email{}).Select("SUM(size) as total").Where("account_id = ?", accountId).Scan(&total).Error
+	return
+}
+
+/*
+MarkAccountMailDeleted
+Describe: mark mails of the account as deleted
+Input: accountId
+Output: err
+*/
+func MarkAccountMailDeleted(accountId int64, db *gorm.DB) (err error) {
+	err = db.Model(&Email{}).Where("account_id = ?", accountId).Update("deleted", true).Error
+	return
 }

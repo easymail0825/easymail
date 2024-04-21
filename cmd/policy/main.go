@@ -6,7 +6,7 @@ import (
 )
 
 func main() {
-	server := policy.NewCheckPolicyServer("tcp", "0.0.0.0:10026")
+	server := policy.New("tcp", "0.0.0.0:10026")
 
 	if server == nil {
 		log.Panicln("Failed to create server")

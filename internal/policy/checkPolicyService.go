@@ -9,16 +9,14 @@ import (
 )
 
 type CheckPolicyServer struct {
-	family         string
-	address        string
-	accountService *account.Service
+	family  string
+	address string
 }
 
-func NewCheckPolicyServer(family, address string) *CheckPolicyServer {
+func New(family, address string) *CheckPolicyServer {
 	return &CheckPolicyServer{
-		family:         family,
-		address:        address,
-		accountService: account.NewService(),
+		family:  family,
+		address: address,
 	}
 }
 
@@ -86,7 +84,7 @@ func (s *CheckPolicyServer) handleClient(conn net.Conn) {
 	if recipient == "" {
 		_, err = conn.Write([]byte("action=reject\n\n"))
 	} else {
-		_, err = s.accountService.FindAccountByName(recipient)
+		_, err = account.FindAccountByName(recipient)
 		if err == nil {
 			_, err = conn.Write([]byte("action=dunno\n\n"))
 		} else {

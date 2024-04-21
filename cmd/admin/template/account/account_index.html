@@ -1,0 +1,448 @@
+{{ template "layout_main.html" .}}
+
+{{ block "header".}}
+{{end}}
+
+{{ block "content" .}}
+<div class="row mb-5">
+    <div class="col-lg-4 col-6">
+        <div class="input-group">
+            <select class="form-control" id="domain_list" name="domain_list">
+                {{ range $domain := .domains }}
+                <option value="{{ $domain.ID }}" {{ if eq $domain.ID $.domainID }}selected{{end}}>
+                    {{$domain.Name }}
+                </option>
+                {{ end }}
+            </select>
+            &nbsp;
+            <select class="form-control" id="status" name="status">
+                <option value="-1">all status</option>
+                <option value="0">active</option>
+                <option value="1">suspect</option>
+                <option value="2">deleted</option>
+            </select>
+        </div>
+    </div>
+    <div class="col-4">
+        <div class="input-group">
+            <input type="text" name="keyword" id="keyword" class="form-control"
+                   placeholder="Please input keyword to search">
+            <span class="input-group-append btn btn-info" id="search"> <i class="fa fa-search"></i>Search</span>
+        </div>
+    </div>
+    <div class="col-2 d-flex justify-content-end">
+        <button class="btn btn-primary" type="button" id="btn_createDomain" data-bs-toggle="modal"
+                data-bs-target="#createAccountModal">
+            <i class="fa fa-plus-circle"></i> Create Account
+        </button>
+    </div>
+</div>
+<div class="row">
+    <div class="col-12">
+        <table id="accountTable" class="display" style="width:100%">
+            <thead>
+            <tr>
+                <th>ID</th>
+                <th>Username</th>
+                <th>Storage Quota</th>
+                <th>Mail Quantity</th>
+                <th>Status</th>
+                <th>Create</th>
+                <th>Operation</th>
+            </tr>
+            </thead>
+        </table>
+    </div>
+</div>
+
+<!--create account modal-->
+<div class="modal fade" id="createAccountModal" tabindex="-1" role="dialog"
+     aria-labelledby="createAccountModalLabel"
+     aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <form id="createAccountForm" onsubmit="return false;">
+                <div class="modal-header">
+                    <h5 class="modal-title">Create Account</h5>
+                    <button type="button" class="btn" data-bs-dismiss="modal" aria-label="Close">
+                        <i class="fa fa-times-circle"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-12">
+                            <input type="hidden" id="domainID" name="domainID" value="{{.domainID}}">
+                            <div class="form-group mb-2">
+                                <label for="accountName">Account Name (without domain)</label>
+                                <input type="text" class="form-control" id="accountName" name="accountName"
+                                       placeholder="" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-6">
+                            <div class="form-group mb-2">
+                                <label for="password">Password</label>
+                                <input type="text" class="form-control" id="password" name="password"
+                                       placeholder="" required>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="form-group mb-2">
+                                <label for="passwordRepeat">Password Again</label>
+                                <input type="text" class="form-control" id="passwordRepeat" name="passwordRepeat"
+                                       placeholder="" required>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="form-group mb-2">
+                                    <label for="storageQuota">Storage Quota(Unit G, -1 for no limit)</label>
+                                    <input type="number" class="form-control" id="storageQuota" name="storageQuota"
+                                           value="-1" placeholder="" required>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="form-group mb-2">
+                                    <label for="passwordExpired">Password Expired Date(empty for no limit)</label>
+                                    <input type="date" class="form-control" id="passwordExpired"
+                                           name="passwordExpired"
+                                           value="" placeholder="">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="submit" class="btn btn-primary" id="submitBtn">Submit</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!--edit account modal-->
+<div class="modal fade" id="editAccountModal" tabindex="-1" role="dialog" aria-labelledby="editAccountModalLabel"
+     aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <form id="editAccountForm" onsubmit="return false;">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit <span id="editAccountName"></span></h5>
+                    <button type="button" class="btn" data-bs-dismiss="modal" aria-label="Close">
+                        <i class="fa fa-times-circle"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="accountID" name="accountID">
+                    <div class="row">
+                        <div class="col-6">
+                            <div class="form-group mb-2">
+                                <label for="editPassword">Password</label>
+                                <input type="text" class="form-control" id="editPassword" name="editPassword"
+                                       placeholder="">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="form-group mb-2">
+                                    <label for="editStorageQuota">Storage Quota(Unit G, -1 for no limit)</label>
+                                    <input type="number" class="form-control" id="editStorageQuota"
+                                           name="editStorageQuota"
+                                           value="-1" placeholder="">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="form-group mb-2">
+                                    <label for="editPasswordExpired">Password Expired Date(empty for no
+                                        limit)</label>
+                                    <input type="date" class="form-control" id="editPasswordExpired"
+                                           name="editPasswordExpired"
+                                           value="" placeholder="">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="submit" class="btn btn-primary" id="editSubmitBtn">Submit</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{end}}
+
+{{block "script" .}}
+<script>
+    $(document).ready(function () {
+        var table = $('#accountTable').DataTable({
+            "processing": true,
+            "serverSide": true,
+            "searching": false,
+            "order": [[0, "desc"]],
+            "ajax": {
+                "url": "/account/index",
+                "type": "POST",
+                "contentType": "application/json",
+                "data": function (d) {
+                    return JSON.stringify({
+                        "draw": d.draw,
+                        "columns": d.columns,
+                        "order": d.order,
+                        "start": d.start,
+                        "length": d.length,
+                        "search": d.search,
+                        "domainID": Number($("#domain_list").val()),
+                        "keyword": $("#keyword").val(),
+                        "status": Number($("#status").val()),
+                    });
+                }
+            },
+            'columns': [
+                {'data': 'id'},
+                {'data': 'username'},
+                {
+                    'data': 'storageQuota', 'render': (data, type, full) => {
+                        if (data === -1) {
+                            return full['storageUsage'] + 'G / no limit'
+                        } else {
+                            return full['storageUsage'] + 'G / ' + data + 'G'
+                        }
+                    }
+                },
+                {'data': 'mailQuantity'},
+                {
+                    'data': 'status',
+                    'render': function (data, type, full, meta) {
+                        if (data === 0) {
+                            return "active"
+                        } else if (data === 1) {
+                            return "suspend"
+                        } else if (data === 2) {
+                            return "deleted"
+                        } else {
+                            return "unknown"
+                        }
+                    }
+                },
+                {
+                    'data': 'createTime',
+                    'render': function (data, type, full, meta) {
+                        const momentDate = moment(data);
+                        return momentDate.format('YYYY-MM-DD HH:mm:ss');
+                    }
+                },
+                {
+                    'data': null, 'render': function (data, type, full, meta) {
+                        if (type === 'display') {
+                            let activeButton = '';
+                            let editButton = '';
+                            let deleteButton = '';
+                            if (data.status === 0) {
+                                activeButton = '<button class="btn btn-link btn-active" data-id="' + data.id + '">suspect</button>'
+                                editButton = '<button class="btn btn-link btn-edit" data-id="' + data.id +
+                                    '" data-username="' + data.username + '" data-quota="' + full.storageQuota + '" data-expired="' + full.expiredTime + '">edit</button>'
+                                deleteButton = '<button class="btn btn-link btn-delete" data-id="' + data.id + '">delete</button>';
+                            } else if (data.status === 1) {
+                                activeButton = '<button class="btn btn-link btn-active" data-id="' + data.id + '">active</button>'
+                                deleteButton = '<button class="btn btn-link btn-delete" data-id="' + data.id + '">delete</button>';
+                            }
+                            return activeButton + editButton + deleteButton;
+                        }
+                        return data;
+                    }
+                },
+            ],
+        })
+
+        $('#domain_list').select2({
+            theme: 'bootstrap-5'
+        });
+
+        $("#search").on("click", function () {
+            table.ajax.reload();
+        })
+
+        $("#domain_list").on("change", function () {
+            $("#domainID").val($(this).val())
+            table.ajax.reload();
+        })
+
+        $("#status").on("change", function () {
+            table.ajax.reload();
+        })
+
+        // create account form
+        $("#createAccountForm").validate({
+            rules: {
+                accountName: {
+                    required: true,
+                    minlength: 3,
+                    maxlength: 64,
+                },
+                password: {
+                    minlength: 6,
+                    maxlength: 64,
+                    required: true,
+                },
+                passwordRepeat: {
+                    minlength: 6,
+                    maxlength: 64,
+                    required: true,
+                },
+                storageQuota: {
+                    min: -1,
+                    max: 100000,
+                    required: true,
+                },
+            },
+            messages: {
+                accountName: {
+                    required: "Please input name of the account, 3-64 characters",
+                    minlength: "Minimum of 3 characters is required",
+                    maxlength: "Up to 64 characters"
+                },
+                password: {
+                    required: "Please input password, 6-64 characters",
+                    minlength: "Minimum of 6 characters is required",
+                    maxlength: "Up to 64 characters"
+                },
+                passwordRepeat: {
+                    required: "Please repeat password, 6-64 characters",
+                    minlength: "Minimum of 6 characters is required",
+                    maxlength: "Up to 64 characters"
+                },
+                storageQuota: {
+                    required: "Please input storage quota",
+                },
+            },
+            submitHandler: function (form) {
+                $.ajax({
+                    type: "POST",
+                    url: "/account/create",
+                    data: JSON.stringify($(form).parseForm()),
+                    contentType: 'application/json',
+                    success: function (data) {
+                        if (data.success) {
+                            showMsg(data.success)
+                            $('#createAccountModal').modal('hide');
+                            $(form).validate().resetForm();
+                            table.ajax.reload();
+                        } else {
+                            showMsg(data.error)
+                        }
+                    },
+                    error: function (xhr, status, error) {
+                        showMsg("Request failed:" + error)
+                    }
+                })
+                return false
+            }
+        })
+
+        // active/suspect account
+        $("#accountTable").on("click", ".btn-active", function () {
+            let id = $(this).data("id")
+            $.ajax({
+                url: "/account/active?id=" + id,
+                type: "GET",
+                success: function (data) {
+                    if (data.success) {
+                        showMsg("Operation Success");
+                        table.ajax.reload()
+                    } else {
+                        showMsg("Operation Failed: " + data.error)
+                    }
+                },
+                error: function (xhr, status, error) {
+                    console.log("Request Failed: ", error)
+                }
+            })
+        })
+
+        // edit account
+        $("#accountTable").on("click", ".btn-edit", function () {
+            var id = $(this).data("id")
+            $("#editAccountName").text($(this).data("username") + "@{{.domainName}}")
+            $("#accountID").val(id)
+            $("#editStorageQuota").val($(this).data("quota"))
+            $("#editPasswordExpired").val(moment($(this).data("expired")).format("YYYY-MM-DD"))
+            $("#editAccountModal").modal("show")
+        })
+
+        // delete account
+        $("#accountTable").on("click", ".btn-delete", function () {
+            var id = $(this).data("id")
+            $.confirm({
+                title: 'Are you sure you want to delete it?',
+                content: 'When delete the account, all mails belongs to it will be deleted！',
+                buttons: {
+                    confirm: {
+                        text: "Conform",
+                        action: function () {
+                            $.ajax({
+                                url: "/account/delete?id=" + id,
+                                type: "GET",
+                                success: function (data) {
+                                    if (data.success) {
+                                        $.toast("Delete Success!");
+                                        table.ajax.reload()
+                                    } else {
+                                        $.toast("Delete Failed: " + data.error)
+                                    }
+                                },
+                                error: function (xhr, status, error) {
+                                    console.log("Request Failed: ", error)
+                                }
+                            })
+                        },
+                    },
+                    cancel: {
+                        text: "Cancel",
+                    }
+                },
+            });
+        })
+
+
+        // edit account form
+        $("#editAccountForm").validate({
+            rules: {},
+            messages: {},
+            submitHandler: function (form) {
+                $.ajax({
+                    type: "POST",
+                    url: "/account/edit",
+                    data: JSON.stringify($(form).parseForm()),
+                    contentType: 'application/json',
+                    success: function (data) {
+                        if (data.success) {
+                            showMsg(data.success)
+                            $('#editAccountModal').modal('hide');
+                            $(form).validate().resetForm();
+                            table.ajax.reload();
+                        } else {
+                            showMsg(data.error)
+                        }
+                    },
+                    error: function (xhr, status, error) {
+                        showMsg("Request failed:" + error)
+                    }
+                })
+                return false
+            }
+        })
+
+
+    })
+
+</script>
+{{end}}

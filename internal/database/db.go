@@ -5,22 +5,13 @@ import (
 	"gorm.io/gorm"
 )
 
-var DB *gorm.DB // 全局变量
+var db *gorm.DB // 全局变量
 
-func InitDB(dsn string) (*gorm.DB, error) {
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
-	if err != nil {
-		return nil, err
-	}
-
-	return db, nil
-}
-
-func init() {
+func InitDB(dsn string) error {
 	var err error
-	dsn := "easymail:easymail@tcp(localhost:3306)/easymail?charset=utf8&parseTime=True&loc=Local"
-	DB, err = InitDB(dsn)
+	db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
-		panic("failed to connect to database")
+		return err
 	}
+	return nil
 }

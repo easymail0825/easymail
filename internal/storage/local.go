@@ -13,9 +13,8 @@ import (
 
 // LocalStorage is a Storager implementation that saves files locally.
 type LocalStorage struct {
-	BaseDir        string
-	accountService *account.Service
-	lock           sync.Mutex
+	BaseDir string
+	lock    sync.Mutex
 }
 
 func (s *LocalStorage) Query(accID int64, page int, pageSize int) ([]account.Email, error) {
@@ -26,9 +25,8 @@ func (s *LocalStorage) Query(accID int64, page int, pageSize int) ([]account.Ema
 // NewLocalStorage creates a new LocalStorage instance.
 func NewLocalStorage(baseDir string) *LocalStorage {
 	return &LocalStorage{
-		BaseDir:        baseDir,
-		accountService: account.NewService(),
-		lock:           sync.Mutex{},
+		BaseDir: baseDir,
+		lock:    sync.Mutex{},
 	}
 }
 
@@ -39,21 +37,21 @@ func (s *LocalStorage) Save(accountName string, email *account.Email, content io
 		return "", errors.New("account name is empty")
 	}
 	var acc *account.Account
-	acc, err = s.accountService.FindAccountByName(accountName)
+	acc, err = account.FindAccountByName(accountName)
 	if err != nil {
 		return "", errors.New("account not found")
 	}
-	if !s.accountService.ValidateAccount(*acc) {
+	if !account.ValidateAccount(*acc) {
 		return "", errors.New("account is disabled")
 	}
 
 	// check domain status
 	var domain *account.Domain
-	domain, err = s.accountService.FindDomainByID(acc.DomainID)
+	domain, err = account.FindDomainByID(acc.DomainID)
 	if err != nil {
 		return "", errors.New("domain not found")
 	}
-	if !s.accountService.ValidateDomain(*domain) {
+	if !account.ValidateDomain(*domain) {
 		return "", errors.New("domain is disabled")
 	}
 
@@ -92,7 +90,7 @@ func (s *LocalStorage) Save(accountName string, email *account.Email, content io
 	email.SaveTime = time.Now()
 
 	// update mail database
-	err = s.accountService.SaveEmail(email)
+	err = acc.SaveEmail(email)
 	if err != nil {
 		return "", err
 	}

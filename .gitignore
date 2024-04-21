@@ -1,0 +1,16 @@
+# Goland/IntelliJ IDEA
+.idea/
+*.iml
+.DS_Store/
+
+# VS Code
+.vscode/
+
+logs/
+tmp/
+
+node_modules/
+bower_components/
+/data/
+
+go.sum

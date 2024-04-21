@@ -4,11 +4,12 @@ import (
 	"easymail/internal/database"
 	"golang.org/x/crypto/bcrypt"
 	"testing"
+	"time"
 )
 
 // crypt加密用户密码
 func TestCrypt(t *testing.T) {
-	password := "admin"
+	password := "123456"
 	hashedPassword, err := GeneratePassword(password)
 	t.Log(hashedPassword, err)
 }
@@ -21,11 +22,11 @@ func TestCompare(t *testing.T) {
 }
 
 func TestMigrate(t *testing.T) {
-	db := database.DB
+	db := database.GetDB()
 	var err error
-	//if err = db.AutoMigrate(&Domain{}); err != nil {
-	//	t.Fail()
-	//}
+	if err = db.AutoMigrate(&Domain{}, &Account{}); err != nil {
+		t.Fail()
+	}
 	err = db.AutoMigrate(&Email{})
 	if err != nil {
 		t.Fail()
@@ -33,24 +34,22 @@ func TestMigrate(t *testing.T) {
 }
 
 func TestCreateDomain(t *testing.T) {
-	as := NewService()
-	err := as.CreateDomain("super.com")
+	err := CreateDomain("super.com", "test domain")
 	if err != nil {
+		t.Log(err)
 		t.Fail()
 	}
 }
 
 func TestCreateAccount(t *testing.T) {
-	as := NewService()
-	err := as.CreateAccount("admin", "admin", "super.com")
+	err := CreateAccount("super.com", "admin", "123456", -1, time.Now().Add(time.Hour*24*30*24))
 	if err != nil {
 		t.Fail()
 	}
 }
 
 func TestAuthAccount(t *testing.T) {
-	as := NewService()
-	err := as.Authorize("admin@super.com", "admin")
+	_, err := Authorize("admin@super.com", "admin")
 	if err != nil {
 		t.Log(err)
 		t.Fail()
@@ -58,8 +57,7 @@ func TestAuthAccount(t *testing.T) {
 }
 
 func TestGetDomain(t *testing.T) {
-	as := NewService()
-	domain, err := as.FindDomainByName("super.com")
+	domain, err := FindDomainByName("super.com")
 	if err != nil {
 		t.Fail()
 	}
@@ -67,11 +65,19 @@ func TestGetDomain(t *testing.T) {
 }
 
 func TestValidateAccount(t *testing.T) {
-	as := NewService()
-	acc, err := as.FindAccountByName("admin@super.com")
+	acc, err := FindAccountByName("admin@super.com")
 	if err == nil {
-		v := as.ValidateAccount(*acc)
+		v := ValidateAccount(*acc)
 		t.Log(v)
 
 	}
+}
+
+func TestGenerateRandomString(t *testing.T) {
+	s, err := GenerateRandomString(16)
+
+	if err != nil {
+		t.Fail()
+	}
+	t.Log(s)
 }
