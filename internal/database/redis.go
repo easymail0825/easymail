@@ -6,9 +6,9 @@ import (
 
 var rc *redis.Client // 全局变量
 
-func InitRedis() {
+func initRedis(dsn string) {
 	rc = redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
+		Addr:     dsn,
 		Password: "",
 		DB:       0,
 	})

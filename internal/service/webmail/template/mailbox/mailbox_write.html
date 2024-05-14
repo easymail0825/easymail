@@ -1,0 +1,110 @@
+{{ template "layout_main.html" .}}
+
+{{ block "header".}}
+{{end}}
+
+{{ block "content" .}}
+<div class="d-flex flex-column" style="height: 92vh">
+    <form name="formWrite" id="formWrite" action="/mailbox/write" method="POST" enctype="multipart/form-data" onsubmit="return false;">
+        <div class="row">
+            <div class="col-12">
+                <div class="input-group mb-2">
+                    <span class="input-group-text mail-write-label">Receipt:&nbsp;</span>
+                    <input type="text" class="form-control mail-write-label" placeholder="" name="receipt" id="receipt"
+                           value="admin@super.com">
+                </div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-12">
+                <div class="input-group mb-2">
+                    <span class="input-group-text mail-write-label">Subject:&nbsp;</span>
+                    <input type="text" class="form-control mail-write-label" placeholder="" name="subject" id="subject"
+                           value="Test mail from webmail">
+                </div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-12">
+                <div class="input-group mb-2">
+                    <span class="input-group-text mail-write-label">Attach:&nbsp;</span>
+                    <input type="file" class="form-control-file mail-write-label" name="attach" id="attach" multiple>
+                </div>
+            </div>
+        </div>
+        <input type="hidden" name="hidContent" id="hidContent" value="">
+    </form>
+    <div class="row flex-grow-1">
+        <div class="col-12">
+            <textarea id="mailContent" name="mailContent" class="form-control">Test boyd for you...</textarea>
+        </div>
+    </div>
+
+    <div class="row mt-3">
+        <div class="col-12">
+            <button class="btn btn-primary" id="btnSent"><i class="fa fa-paper-plane mx-2"></i>Sent</button>
+            <button class="btn btn-secondary mx-2" disabled><i class="fa fa-file-import mx-2"></i>Save To Draft
+            </button>
+        </div>
+    </div>
+</div>
+
+{{end}}
+
+{{block "script" .}}
+<script src="/static/js/vendor/tinymce/tinymce.min.js"></script>
+<script src="/static/js/jquery-validation-1.20.0.min.js"></script>
+
+<script>
+    $(document).ready(function () {
+        tinymce.init({
+            selector: 'textarea#mailContent',
+            height: '100%',
+            license_key: 'gpl',
+            plugins: [
+                'advlist', 'autolink',
+                'lists', 'link', 'image', 'charmap', 'preview', 'anchor', 'searchreplace', 'visualblocks',
+                'fullscreen', 'insertdatetime', 'media', 'table', 'help', 'wordcount'
+            ],
+            toolbar: 'undo redo |  casechange blocks | bold italic backcolor | alignleft aligncenter alignright alignjustify |' +
+                'bullist numlist checklist outdent indent | removeformat | code table help'
+        })
+
+
+        $("#formWrite").validate({
+            rules: {
+                receipt: {
+                    required: true,
+                    email: true,
+                },
+                subject: {
+                    required: true,
+                    minlength: 2,
+                },
+            },
+            messages: {
+                receipt: {
+                    required: "Please set receipt",
+                    email: "mail address required",
+                },
+                subject: {
+                    required: "Please set subject",
+                    minlength: "At least 2 characters",
+                },
+            },
+            submitHandler: function (form) {
+                form.submit()
+            }
+        })
+
+        $("#btnSent").click(function () {
+            let validator = $("#formWrite").validate()
+            if(validator.form()){
+                $("#hidContent").val(tinyMCE.activeEditor.getContent())
+                $("#formWrite").submit()
+            }
+        })
+
+    })
+</script>
+{{end}}

@@ -1,0 +1,248 @@
+{{ template "layout_main.html" .}}
+
+{{ block "header".}}
+
+{{end}}
+
+{{ block "content" .}}
+<div id="toolbar">
+    <form class="form-inline">
+        <span id="folderName" class="text-black font-weight-bold mx-1"></span>
+        <span class="mx-1">-</span>
+        <span id="totalMailCount" class="text-black font-weight-bold mx-1"></span>
+        <span class="mx-1">/</span>
+        <span id="newMailCount" class="text-danger"></span>
+        <span id="reload" class="btn"><i class="fa fa-sync-alt"></i> </span>
+        <button type="button" class="btn btn-mark btn-light ml-1">Mark Read</button>
+        <button type="button" class="btn btn-delete btn-light ml-1">Delete</button>
+        <button type="button" class="btn btn-forward btn-light ml-1">Forward</button>
+        <div class="dropdown" id="btnMove">
+            <button type="button" class="btn btn-move btn-light dropdown-toggle ml-1" id="dropdownMenu1"
+                    data-bs-toggle="dropdown">Move
+                <span class="caret"></span>
+            </button>
+            <ul class="dropdown-menu" role="menu" aria-labelledby="dropdownMenu1" style="line-height: 2rem">
+                <li role="presentation">
+                    <a role="menuitem" tabindex="-1" href="#" class="text-gray-900 folder-dist">Inbox</a>
+                </li>
+                <li role="presentation">
+                    <a role="menuitem" tabindex="-1" href="#" class="text-gray-900 folder-dist">Trash</a>
+                </li>
+            </ul>
+        </div>
+        <button type="button" class="btn btn-report btn-light ml-1">Report</button>
+    </form>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <table id="mailTable" class="display" style="width:100%">
+            <thead>
+            <tr>
+                <th><input type="checkbox" id="checkAll"></th>
+                <th></th>
+                <th>Sender</th>
+                <th>Subject</th>
+                <th>Size</th>
+                <th>Time</th>
+            </tr>
+            </thead>
+        </table>
+    </div>
+</div>
+{{end}}
+
+{{block "script" .}}
+<script>
+    $(document).ready(function () {
+        var table = $('#mailTable').DataTable({
+            "processing": true,
+            "serverSide": true,
+            "searching": false,
+            "order": [[5, "desc"]],
+            "createdRow": function (row, data, dataIndex) {
+                if (data.readStatus === 0) {
+                    $(row).addClass('font-weight-bold')
+                }
+                $(row).addClass('custom-row-height');
+            },
+            "ajax": {
+                "url": "/mailbox/folder/{{.folderID}}",
+                "type": "POST",
+                "contentType": "application/json",
+                "data": function (d) {
+                    return JSON.stringify({
+                        "draw": d.draw,
+                        "columns": d.columns,
+                        "order": d.order,
+                        "start": d.start,
+                        "length": d.length,
+                        "search": d.search,
+                    });
+                }
+            },
+            "initComplete": function (settings, json) {
+                $("#folderName").text(json.folder)
+                $("#totalMailCount").text(json.recordsTotal)
+                $("#newMailCount").text(json.news)
+            },
+            'columns': [
+                {
+                    'data': null,
+                    "orderable": false,
+                    'width': "36px",
+                    'render': function (data, type, row, meta) {
+                        return '<input type="checkbox" class="checkOne" data-id="' + row.id + '">'
+                    },
+
+                },
+                {
+                    'data': null,
+                    'width': "36px",
+                    "orderable": false,
+                    'render': function (data, type, row, meta) {
+                        if (row.readStatus === 0) {
+                            return '<i class="fas fa-fw fa-bell text-danger">'
+                        } else {
+                            return ''
+                        }
+                    }
+                },
+                {'data': 'sender', "width": "350px", "orderable": false},
+                {
+                    'data': 'subject', "orderable": false,
+                    'render': function (data, type, row, meta) {
+                        return data + row.digest
+                    }
+                },
+                {
+                    'data': 'size', "width": "80px",
+                    'render': function (data, type, row, meta) {
+                        return numFormat(data)
+                    }
+                },
+                {
+                    'data': 'mailTime', "width": "200px",
+                    'render': function (data, type, row, meta) {
+                        const momentDate = moment(data);
+                        return momentDate.format('YYYY-MM-DD HH:mm:ss');
+                    }
+                },
+            ],
+            "columnDefs": [{
+                "targets": 0,
+                "className": "text-center checkboxColumn"
+            }],
+            "layout": {
+                "topStart": $("#toolbar"),
+                "topEnd": "paging",
+                "bottomStart": "pageLength",
+                "bottomEnd": "info",
+            }
+        })
+
+        table.on('draw', function () {
+            $("#checkAll").prop("checked", false)
+        });
+
+        // select all
+        table.on("click", "#checkAll", function () {
+            $(".checkOne").prop("checked", $(this).prop("checked"));
+        })
+
+        // auto enable check all checked
+        table.on("click", ".checkOne", function () {
+            let flag = $(".checkOne:checked").length === $(".checkOne").length;
+            $("#checkAll").prop("checked", flag);
+        });
+
+        // click row to open the mail, except the checkbox
+        table.on('click', 'tr td:not(:first-child)', function (e) {
+            $(this).siblings('td').each(function () {
+                if (this.classList.contains("checkboxColumn")) {
+                    let checkbox = $(this).find(".checkOne")
+                    window.location.href = '/mailbox/read/' + checkbox.data("id")
+                }
+            })
+        });
+
+        function getSelectedIds() {
+            let ids = [];
+            let rows = table.rows({selected: true}).nodes();
+
+            $.each(rows, function (index, row) {
+                let id = $(row).find('.checkOne:checked').data('id');
+                if (id === undefined || id.length === 0) {
+                    return
+                }
+                ids.push(Number(id));
+            });
+            return ids;
+        }
+
+        function reloadTableWithCurrentPage() {
+            var currentPage = table.page.info().page;
+            table.clear().draw(false);
+            table.ajax.reload(null, false);
+            table.draw(false);
+            table.page(currentPage).draw(false);
+        }
+
+        $("#toolbar .btn-mark").on("click", function () {
+            let ids = getSelectedIds();
+            if (ids.length === 0) {
+                return
+            }
+            $.ajax({
+                url: "/mailbox/markread",
+                type: "POST",
+                data: JSON.stringify({
+                    "ids": ids
+                }),
+                contentType: 'application/json',
+                success: function (data) {
+                    if (data.success) {
+                        // showMsg("Mark mail read " + data.data)
+                        reloadTableWithCurrentPage()
+                    } else {
+                        showMsg("Operation Failed: " + data.error)
+                    }
+                },
+                error: function (xhr, status, error) {
+                    console.log("Request Failed: ", error)
+                }
+            })
+        })
+
+        $("#toolbar .btn-delete").on("click", function () {
+            let ids = getSelectedIds();
+            if (ids.length === 0) {
+                return
+            }
+            $.ajax({
+                url: "/mailbox/delete",
+                type: "POST",
+                data: JSON.stringify({
+                    "ids": ids
+                }),
+                contentType: 'application/json',
+                success: function (data) {
+                    if (data.success) {
+                        // showMsg("Mark mail read " + data.data)
+                        reloadTableWithCurrentPage()
+                    } else {
+                        showMsg("Operation Failed: " + data.error)
+                    }
+                },
+                error: function (xhr, status, error) {
+                    console.log("Request Failed: ", error)
+                }
+            })
+        })
+
+        $("#reload").on("click", reloadTableWithCurrentPage)
+
+
+    })
+</script>
+{{end}}

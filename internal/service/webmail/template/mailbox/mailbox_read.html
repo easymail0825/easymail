@@ -1,0 +1,84 @@
+{{ template "layout_main.html" .}}
+
+{{ block "header".}}
+{{end}}
+
+{{ block "content" .}}
+<div class="d-flex flex-column" style="height: 92vh">
+    <div class="row">
+        <div class="col-12">
+            <div class="input-group">
+                <span class="mt-1 mx-3 btn-link" onclick="window.history.back();">&lt;&lt;Back</span>
+                <span class="h3 ">{{.mail.Subject}}<i class="fa fa-star small ms-2"></i></span>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between readmail-info">
+                <div class="attache-item">
+                    <span class="font-weight-bold mx-2">{{.sender.Name}} {{.sender.Address}}</span>
+                    <span class="mx-2">Sent To</span>
+                    {{ range $index, $to := .receipts }}
+                    <span class="text-gray-600 mx-2">{{$to.Name}} {{$to.Address}}</span>
+                    {{end}}
+                </div>
+                <div class="attache-item">
+                    <span class="text-gray-600 mx-2">{{.mail.MailTime}}</span>
+                    <span class="btn btn-link text-gray-600">More</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    {{if .attaches }}
+    <div class="row mb-3">
+        <div class="col-12">
+            {{ range $index, $a := .attaches }}
+            <div class="attache-item" data-file-name="{{$a.Name}}" data-id="{{$.mail.ID}}">
+                <span class="link-light mx-1"><i class="fa {{$a.Icon}} text-gray-500"></i> </span>
+                <span>{{$a.Name}}</span>
+                <span>({{$a.SizeAlias}})</span>
+            </div>
+            {{end}}
+            <div class="attache-item" data-file-name="" data-id="{{$.mail.ID}}" data-all="true">
+                <span class="btn btn-link btn-disabled">Download All</span>
+            </div>
+
+        </div>
+    </div>
+    {{end}}
+
+    <div class="row flex-grow-1">
+        <div class="col-12">
+            <div class="readmail-content text-center" id="readmail">
+                <iframe id="mailFrame" src="data:text/html;base64,{{.b64src}}"></iframe>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{block "script" .}}
+<script>
+    $(document).ready(function () {
+        function adjustIframe() {
+            let ifm = document.getElementById("mailFrame");
+            let parent = ifm.parentNode;
+            ifm.style.height = parent.clientHeight + 'px';
+            ifm.style.width = parent.clientWidth + 'px';
+        }
+
+        window.addEventListener('resize', adjustIframe);
+        adjustIframe();
+
+
+        $(".attache-item").on("click", function () {
+            let mid = $(this).data("id")
+            let fileName = $(this).data("fileName")
+            let all = $(this).data("all")
+            downloadFileByForm("/mailbox/attach/" + mid, fileName, all)
+        })
+    })
+</script>
+{{end}}

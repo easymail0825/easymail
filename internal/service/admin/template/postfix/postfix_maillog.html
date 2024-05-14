@@ -1,0 +1,155 @@
+{{ template "layout_main.html" .}}
+
+{{ block "header".}}
+{{end}}
+
+{{ block "content" .}}
+<div class="row mb-5">
+    <div class="col-3">
+
+    </div>
+    <div class="col-9 d-flex justify-content-end">
+        <div class="input-group">
+            <input type="text" class="form-control" id="sel_startdate" placeholder="开始日期">
+            <span>-</span>
+            <input type="text" class="form-control" id="sel_enddate" placeholder="结束日期">
+            <select class="form-control" id="searchField" name="searchField">
+                <option value="-1" selected>Search Filed</option>
+                <option value="0">Queue ID</option>
+                <option value="1">Host Name</option>
+                <option value="2">Host IP</option>
+                <option value="3">Mail From</option>
+                <option value="4">Mail To</option>
+            </select>
+            <input type="text" name="keyword" id="keyword" class="form-control"
+                   placeholder="Please input keyword to search">
+            <span class="input-group-append btn btn-info" id="search"> <i class="fa fa-search"></i>Search</span>
+        </div>
+    </div>
+</div>
+<div class="row">
+    <div class="col-12">
+        <table id="mailLogTable" class="display" style="width:100%">
+            <thead>
+            <tr>
+                <th>ID</th>
+                <th>LogTime</th>
+                <th>Session ID</th>
+                <th>Process</th>
+                <th>Message</th>
+            </tr>
+            </thead>
+        </table>
+    </div>
+</div>
+
+<!--create account modal-->
+<div class="modal fade" id="showMailLogModal" tabindex="-1" role="dialog"
+     aria-labelledby="showMailLogModalLabel"
+     aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">View Full Mail Log</h5>
+                <button type="button" class="btn" data-bs-dismiss="modal" aria-label="Close">
+                    <i class="fa fa-times-circle"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary" id="submitBtn">Submit</button>
+                </div>
+            </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+
+{{end}}
+
+{{block "script" .}}
+<script>
+    $(document).ready(function () {
+        var table = $('#mailLogTable').DataTable({
+            "processing": true,
+            "serverSide": true,
+            "searching": false,
+            "order": [[0, "desc"]],
+            "ajax": {
+                "url": "/postfix/maillog/index",
+                "type": "POST",
+                "contentType": "application/json",
+                "data": function (d) {
+                    return JSON.stringify({
+                        "draw": d.draw,
+                        "columns": d.columns,
+                        "order": d.order,
+                        "start": d.start,
+                        "length": d.length,
+                        "search": d.search,
+                        "startDate": $("#sel_startdate").val(),
+                        "endDate": $("#sel_enddate").val(),
+                        "keyword": $("#keyword").val(),
+                        "searchField": Number($("#searchField").val()),
+                    });
+                }
+            },
+            'columns': [
+                {'data': 'id'},
+                {
+                    'data': 'logTime',
+                    'orderable': false,
+                    'render': function (data, type, row, meta) {
+                        const momentDate = moment(data);
+                        return momentDate.format('YYYY-MM-DD HH:mm:ss');
+                    }
+                },
+                {'data': 'sessionID', 'orderable': false},
+                {'data': 'process', 'orderable': false},
+                {'data': 'message', 'orderable': false},
+            ],
+        })
+        $("#search").on("click", function () {
+            table.ajax.reload();
+        })
+
+        $('#sel_startdate').datepicker({
+            format: 'yyyy-mm-dd',
+            autoclose: true,
+            todayHighlight: true,
+        }).datepicker('setDate', moment().subtract(30, 'days').format('YYYY-MM-DD'));
+        $('#sel_enddate').datepicker({
+            format: 'yyyy-mm-dd',
+            autoclose: true,
+            todayHighlight: true,
+        }).datepicker('setDate', moment().format('YYYY-MM-DD'));
+
+
+        // active/suspect account
+        $("#mailLogTable").on("click", ".btn-active", function () {
+            let id = $(this).data("id")
+            $.ajax({
+                url: "/account/active?id=" + id,
+                type: "GET",
+                success: function (data) {
+                    if (data.success) {
+                        showMsg("Operation Success");
+                        table.ajax.reload()
+                    } else {
+                        showMsg("Operation Failed: " + data.error)
+                    }
+                },
+                error: function (xhr, status, error) {
+                    console.log("Request Failed: ", error)
+                }
+            })
+        })
+
+
+    })
+
+</script>
+{{end}}

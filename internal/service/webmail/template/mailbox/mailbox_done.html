@@ -1,0 +1,20 @@
+{{ template "layout_main.html" .}}
+
+{{ block "header".}}
+{{end}}
+
+{{ block "content" .}}
+
+    邮件已发送
+    此邮件发送成功，并已保存到“已发送”文件夹
+    邮件已发送给以下收件人：
+    easymail0825<easymail0825@qq.com>此联系人未保存，你可以 修改并保存
+{{end}}
+
+{{block "script" .}}
+<script>
+    $(document).ready(function () {
+
+    })
+</script>
+{{end}}

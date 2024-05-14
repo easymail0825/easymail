@@ -1,0 +1,44 @@
+mysql: easymail:easymail@tcp(localhost:3306)/easymail?charset=utf8&parseTime=True&loc=Local
+redis: 127.0.0.1:6379
+log_file: easymail.log
+apps:
+  - name: dovecot
+    family: tcp
+    listen: 127.0.0.1:10025
+    enable: true
+
+  - name: policy
+    family: tcp
+    listen: 127.0.0.1:10026
+    enable: true
+
+  - name: filter
+    family: tcp
+    listen: 127.0.0.1:10027
+    enable: true
+
+  - name: lmtp
+    family: tcp
+    listen: 127.0.0.1:10028
+    enable: true
+
+  - name: admin
+    family: tcp
+    listen: 127.0.0.1:10088
+    enable: true
+    parameter:
+      root: /home/bobxiao/Projects/golang/easymail/internal/service/admin
+      cookie_password: 8HVP0sYJN8Izlsyn
+      cookie_tag: easymail_admin
+
+  - name: webmail
+    family: tcp
+    listen: 127.0.0.1:10089
+    enable: true
+    parameter:
+      root: /home/bobxiao/Projects/golang/easymail/internal/service/webmail
+      cookie_password: 9PVP2xZDX9Jkoqbr
+      cookie_tag: easymail_webmail
+
+  - name: agent
+    enable: false

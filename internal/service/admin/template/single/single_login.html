@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Easymail is complete email system base on postfix, include account, antispam, antivirus, forward, and more.">
+    <meta name="author" content="Easymail">
+    <title>Login - EasyMail</title>
+
+    <link href="/static/css/fontawesome-all.min.css" rel="stylesheet" type="text/css">
+    <link href="/static/css/sb-admin-2.css" rel="stylesheet">
+
+</head>
+
+<body class="bg-gradient-primary d-flex flex-column justify-content-center">
+<div class="container">
+
+    <!-- Outer Row -->
+    <div class="row justify-content-center">
+
+        <div class="col-xl-10 col-lg-12 col-md-9">
+
+            <div class="card o-hidden border-0 shadow-lg my-5">
+                <div class="card-body p-0">
+                    <!-- Nested Row within Card Body -->
+                    <div class="row">
+                        <div class="col-lg-6 d-none d-lg-block bg-login-image"></div>
+                        <div class="col-lg-6">
+                            <div class="p-5">
+                                <div class="text-center">
+                                    <h1 class="h4 text-gray-900 mb-4">Welcome To Easymail Admin!</h1>
+                                    <p id="login_error" class="h6 text-danger mb-3">{{.error}}</p>
+                                </div>
+                                <form id="loginForm" class="user" method="post" onsubmit="return false;"
+                                      action="/login">
+                                    <div class="form-group">
+                                        <input type="email" class="form-control form-control-user"
+                                               id="username" name="username" aria-describedby="username" value=""
+                                               placeholder="Enter email...">
+                                    </div>
+                                    <div class="form-group">
+                                        <input type="password" class="form-control form-control-user"
+                                               id="password" name="password" placeholder="Password" value="">
+                                    </div>
+                                    <div class="form-group">
+                                        <div class="custom-control custom-checkbox small">
+                                            <input type="checkbox" class="custom-control-input" id="remember">
+                                            <label class="custom-control-label" for="remember">Remember
+                                                Me</label>
+                                        </div>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary btn-user btn-block">
+                                        Login
+                                    </button>
+
+                                </form>
+                                <hr>
+                                <div class="text-center">
+                                    <a class="small" href="/forget">Forgot Password?</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+</div>
+
+<script src="/static/js/jquery-3.7.1.min.js"></script>
+<script src="/static/js/bootstrap.bundle.min.js"></script>
+<script src="/static/js/jquery-validation-1.20.0.min.js"></script>
+<script src="/static/js/sb-admin-2.min.js"></script>
+<script>
+    $().ready(function () {
+        $("#loginForm").validate({
+            rules: {
+                username: {
+                    required: true,
+                    email: true,
+                    minlength: 6
+                },
+                password: {
+                    required: true,
+                    minlength: 6
+                },
+            },
+            messages: {
+                username: {
+                    required: "please input email",
+                    email: "please input email",
+                    minlength: "at least 6 characters"
+                },
+                password: {
+                    required: "please input password",
+                    minlength: "at least 6 characters"
+                },
+            },
+            submitHandler: function (form) {
+                console.log(form)
+                form.submit()
+            },
+        });
+    });
+</script>
+</body>
+
+</html>

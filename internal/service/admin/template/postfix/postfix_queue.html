@@ -1,0 +1,251 @@
+{{ template "layout_main.html" .}}
+
+{{ block "header".}}
+{{end}}
+
+{{ block "content" .}}
+<div class="row mb-5">
+</div>
+<div class="row">
+    <div class="col-12">
+        <table id="mailQueueTable" class="display" style="width:100%">
+            <thead>
+            <tr>
+                <th><input type="checkbox" id="checkAll"></th>
+                <th>Queue Name</th>
+                <th>Queue ID</th>
+                <th>Sender</th>
+                <th>Recipients</th>
+                <th>Arrival Time</th>
+                <th>Size</th>
+                <th></th>
+            </tr>
+            </thead>
+        </table>
+    </div>
+</div>
+
+<!--create account modal-->
+<div class="modal fade" id="showMailQueueModal" tabindex="-1" role="dialog"
+     aria-labelledby="showMailQueueModalLabel"
+     aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">View Queue <span id="queueID"></span></h5>
+                <button type="button" class="btn" data-bs-dismiss="modal" aria-label="Close">
+                    <i class="fa fa-times-circle"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="card">
+                    <div class="card-body">
+                        <pre id="queueHeader">
+                        </pre>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary" id="submitBtn">Submit</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+{{end}}
+
+{{block "script" .}}
+<script>
+    $(document).ready(function () {
+        var table = $('#mailQueueTable').DataTable({
+            "searching": true,
+            "order": [[1, "desc"]],
+            "ajax": {
+                "url": "/postfix/queue/index",
+                "type": "POST",
+                "contentType": "application/json",
+            },
+            'columns': [
+                {
+                    'data': null,
+                    "orderable": false,
+                    'render': function (data, type, row, meta) {
+                        return '<input type="checkbox" class="checkOne" data-id="' + row.queue_id + '">'
+                    }
+                },
+                {'data': 'queue_name'},
+                {'data': 'queue_id'},
+                {'data': 'sender'},
+                {
+                    'data': 'recipients', 'render': function (data, type, row, meta) {
+                        return data.map(obj => obj.address).join(',');
+                    }
+                },
+                {
+                    'data': 'arrival_time',
+                    'render': function (data, type, row, meta) {
+                        const momentDate = moment(data * 1000);
+                        return momentDate.format('YYYY-MM-DD HH:mm:ss');
+                    }
+                },
+                {'data': 'message_size'},
+                {
+                    'data': null, 'render': (data, type, row, meta) => {
+                        if (type === 'display') {
+                            let viewButton = '';
+                            let flushButton = '';
+                            let deleteButton = '';
+                            viewButton = '<button class="btn btn-link btn-view" data-id="' + data.queue_id + '">view</button>'
+                            flushButton = '<button class="btn btn-link btn-flush" data-id="' + data.queue_id + '">flush</button>'
+                            deleteButton = '<button class="btn btn-link btn-delete" data-id="' + data.queue_id + '">delete</button>';
+                            return viewButton + flushButton + deleteButton;
+                        }
+                        return data;
+                    }
+                }
+            ],
+        })
+
+        // custom buttons
+        $(".dt-search").prepend('<button id="btn_flush_selected" class="btn btn-light mx-3"><i class="fa fa-sync mx-1"></i>Flush Selected</button>' +
+            '<button id="btn_delete_selected" class="btn btn-light mx-3"><i class="fa fa-trash mx-1"></i>Delete Selected</button>')
+
+
+        // select all
+        $("#mailQueueTable").on("click", "#checkAll", function () {
+            $(".checkOne").prop("checked", $(this).prop("checked"));
+        })
+
+        // auto enable check all checked
+        $("#mailQueueTable").on("click", ".checkOne", function () {
+            var flag = $(".checkOne:checked").length == $(".checkOne").length;
+            $("#checkAll").prop("checked", flag);
+        });
+
+        $("#mailQueueTable tbody").on('click', 'tr', function () {
+            let checkbox = $(this).find('.checkOne');
+            checkbox.prop('checked', !checkbox.prop('checked')).trigger('change');
+        });
+
+        // view queue
+        $("#mailQueueTable").on("click", ".btn-view", function () {
+            let id = $(this).data("id")
+            $.ajax({
+                url: "/postfix/queue/view?id=" + id,
+                type: "GET",
+                success: function (data) {
+                    if (data.success) {
+                        $("#queueID").text(id)
+                        $("#queueHeader").text(data.data)
+                        $("#showMailQueueModal").modal("show")
+                    } else {
+                        showMsg("Operation Failed: " + data.error)
+                    }
+                },
+                error: function (xhr, status, error) {
+                    console.log("Request Failed: ", error)
+                }
+            })
+        })
+
+        // flush queue
+        $("#mailQueueTable").on("click", ".btn-flush", function () {
+            let id = $(this).data("id")
+            $.ajax({
+                url: "/postfix/queue/flush?id=" + id,
+                type: "GET",
+                success: function (data) {
+                    if (data.success) {
+                        showMsg("Flush Queue OK: " + id)
+                    } else {
+                        showMsg("Operation Failed: " + data.error)
+                    }
+                },
+                error: function (xhr, status, error) {
+                    console.log("Request Failed: ", error)
+                }
+            })
+        })
+
+        $("#mailQueueTable").on("click", ".btn-delete", function () {
+            let id = $(this).data("id")
+            $.ajax({
+                url: "/postfix/queue/delete?id=" + id,
+                type: "GET",
+                success: function (data) {
+                    if (data.success) {
+                        showMsg("Delete Queue OK: " + id)
+                    } else {
+                        showMsg("Operation Failed: " + data.error)
+                    }
+                },
+                error: function (xhr, status, error) {
+                    console.log("Request Failed: ", error)
+                }
+            })
+        })
+
+        function getSelectedIds() {
+            let ids = [];
+            let rows = table.rows({selected: true}).nodes();
+
+            $.each(rows, function (index, row) {
+                let id = $(row).find('.checkOne:checked').data('id');
+                if (id === undefined || id.length === 0) {
+                    return
+                }
+                ids.push(id);
+            });
+            return ids;
+        }
+
+        // flush many queue
+        $("#btn_flush_selected").on("click", function () {
+            $.ajax({
+                url: "/postfix/queue/flush",
+                type: "POST",
+                data: JSON.stringify({
+                    "ids": getSelectedIds()
+                }),
+                contentType: 'application/json',
+                success: function (data) {
+                    if (data.success) {
+                        showMsg("Flush Queue OK: " + data.data)
+                    } else {
+                        showMsg("Operation Failed: " + data.error)
+                    }
+                },
+                error: function (xhr, status, error) {
+                    console.log("Request Failed: ", error)
+                }
+            })
+        })
+
+        // delete many queue
+        $("#btn_delete_selected").on("click", function () {
+            $.ajax({
+                url: "/postfix/queue/delete",
+                type: "POST",
+                data: JSON.stringify({
+                    "ids": getSelectedIds()
+                }),
+                success: function (data) {
+                    if (data.success) {
+                        showMsg("Delete Queue OK: " + data.data)
+                    } else {
+                        showMsg("Operation Failed: " + data.error)
+                    }
+                },
+                error: function (xhr, status, error) {
+                    console.log("Request Failed: ", error)
+                }
+            })
+        })
+
+
+    })
+
+</script>
+{{end}}
