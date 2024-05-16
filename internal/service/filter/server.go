@@ -1,13 +1,16 @@
 package filter
 
 import (
+	"context"
 	"easymail/internal/easylog"
-	milter "easymail/internal/service/milter"
+	"easymail/internal/model"
+	"easymail/internal/service/milter"
 	"fmt"
 	"log"
 	"net"
 	"net/textproto"
 	"sync"
+	"time"
 )
 
 type Filter struct {
@@ -16,48 +19,69 @@ type Filter struct {
 	optProtocol milter.OptProtocol
 }
 
-func (f *Filter) Connect(host string, family string, port uint16, addr net.IP, m *milter.Modifier) (milter.Response, error) {
-	log.Println("connect from ", host, family, port, addr)
+func (f *Filter) Connect(host string, family string, port uint16, addr net.IP, m *milter.Modifier, feature []milter.Feature) (milter.Response, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Microsecond)
+	defer cancel()
+
+	// query ip ptr
+	if featureSwitch([]string{"feature", "ip", "ptr"}) {
+		go func(ctx context.Context) {
+			ptr, err := QueryPtr(addr.String())
+			if err == nil {
+				feature = append(feature, milter.Feature{Name: "ip-ptr", Value: ptr, DataType: model.DataTypeString})
+			}
+		}(ctx)
+	}
+
+	// query ip region info
+	// only supper GeoLite2-City.mmdb from official https://download.maxmind.com/app/geoip_download_by_token
+	if featureSwitch([]string{"feature", "ip", "region"}) {
+		if geoip != nil {
+			go func(ctx context.Context) {
+				country, province, city, err := QueryRegion(addr)
+				if err == nil {
+					feature = append(feature, milter.Feature{Name: "ip-country", Value: country, DataType: model.DataTypeString})
+					feature = append(feature, milter.Feature{Name: "ip-province", Value: province, DataType: model.DataTypeString})
+					feature = append(feature, milter.Feature{Name: "ip-city", Value: city, DataType: model.DataTypeString})
+				}
+			}(ctx)
+		}
+	}
+
+	if err := increaseCount(ctx, fmt.Sprintf("%s:10min-request", addr.String()), time.Minute*10); err != nil {
+		log.Println("Error updating IP count in Redis:", err)
+	}
 	return milter.RespContinue, nil
 }
 
 func (f *Filter) Helo(name string, m *milter.Modifier) (milter.Response, error) {
-	log.Println("hello ", name)
 	return milter.RespContinue, nil
 }
 
 func (f *Filter) MailFrom(from string, m *milter.Modifier) (milter.Response, error) {
-	log.Println("mail from", from)
 	return milter.RespContinue, nil
 }
 
 func (f *Filter) RcptTo(rcptTo string, m *milter.Modifier) (milter.Response, error) {
-	log.Println("rcpt to", rcptTo)
 	return milter.RespContinue, nil
 }
 
 func (f *Filter) Header(name string, value string, m *milter.Modifier) (milter.Response, error) {
-	log.Println("header", name, value)
 	return milter.RespContinue, nil
 }
 
 func (f *Filter) Headers(h textproto.MIMEHeader, m *milter.Modifier) (milter.Response, error) {
-	log.Println("header", h)
 	return milter.RespContinue, nil
 }
 
 func (f *Filter) BodyChunk(chunk []byte, m *milter.Modifier) (milter.Response, error) {
-
-	log.Printf("body chunk %s\n", chunk)
 	return milter.RespContinue, nil
 }
 
 func (f *Filter) Body(m *milter.Modifier, macro map[string]string) (milter.Response, error) {
-	log.Println("macro", macro)
 	if v, ok := macro["i"]; ok {
 		m.AddHeader("X-Queue-ID", v)
 	}
-	log.Println("body")
 	return milter.RespContinue, nil
 }
 

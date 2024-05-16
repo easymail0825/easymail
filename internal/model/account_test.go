@@ -1,7 +1,8 @@
-package account
+package model
 
 import (
-	"easymail/internal/database"
+	"bytes"
+	"github.com/jhillyerd/enmime"
 	"golang.org/x/crypto/bcrypt"
 	"testing"
 	"time"
@@ -15,16 +16,15 @@ func TestCrypt(t *testing.T) {
 }
 
 func TestCompare(t *testing.T) {
-	password := "admin"
-	hashedPassword := "$2a$10$yAanFMv4U7tX21Q9yDhpqOhLWVGhlpYl4ZZMKVfjc0x6N/g/wKrDS"
+	password := "123456"
+	hashedPassword := "$2a$10$M9ezUs6WL1PXAEdjXCdMAugMuvw4/rpAvzauPyoeslOI0Ip2DJWCy"
 	err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
 	t.Log(err)
 }
 
 func TestMigrate(t *testing.T) {
-	db := database.GetDB()
 	var err error
-	if err = db.AutoMigrate(&Domain{}, &Account{}); err != nil {
+	if err = db.AutoMigrate(&Domain{}, &Account{}, &Email{}); err != nil {
 		t.Fail()
 	}
 	err = db.AutoMigrate(&Email{})
@@ -42,7 +42,7 @@ func TestCreateDomain(t *testing.T) {
 }
 
 func TestCreateAccount(t *testing.T) {
-	err := CreateAccount("super.com", "admin", "123456", -1, time.Now().Add(time.Hour*24*30*24))
+	err := CreateAccount(1, "admin", "123456", -1, time.Now().Add(time.Hour*24*30*24))
 	if err != nil {
 		t.Fail()
 	}
@@ -80,4 +80,29 @@ func TestGenerateRandomString(t *testing.T) {
 		t.Fail()
 	}
 	t.Log(s)
+}
+
+func TestCreateEmail(t *testing.T) {
+	mailer := "easymail 1.0.0"
+	html := "<p color='red'>hello world</p>"
+
+	builder := enmime.Builder().
+		From("admin", "admin@super.com").
+		Subject("this is test email from enmime").
+		HTML([]byte(html)).
+		Header("X-Mailer", mailer).
+		To("", "admin@super.com")
+
+	builder = builder.AddFileAttachment("/home/bobxiao/tmp/pypolicyd-spf-1.3.2.tar.gz")
+	buf := &bytes.Buffer{}
+	root, err := builder.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = root.Encode(buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("%s", buf.String())
+
 }

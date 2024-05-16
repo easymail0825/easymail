@@ -69,7 +69,7 @@ func New(_log *easylog.Logger, root, cookiePassword, cookieTag string) *gin.Engi
 	}
 
 	accountController := controller.AccountController{}
-	accountGroup := r.Group("/model")
+	accountGroup := r.Group("/account")
 	{
 		accountGroup.GET("/domain/index", accountController.IndexDomain)
 		accountGroup.POST("/domain/index", accountController.IndexDomain)
@@ -98,6 +98,13 @@ func New(_log *easylog.Logger, root, cookiePassword, cookieTag string) *gin.Engi
 		postfixGroup.GET("/queue/delete", queueController.Delete)
 		postfixGroup.POST("/queue/flush", queueController.Flush)
 		postfixGroup.POST("/queue/delete", queueController.Delete)
+	}
+
+	configureController := controller.ConfigureController{}
+	configureGroup := r.Group("/configure")
+	{
+		configureGroup.GET("/node/:id", configureController.Node)
+		configureGroup.POST("/node/:id", configureController.Node)
 	}
 	return r
 }

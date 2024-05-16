@@ -40,7 +40,6 @@ func init() {
 func initialize() (err error) {
 	// check .initialized file, if exists, do nothing
 	if _, err := os.Stat(filepath.Join("./", ".initialized")); err == nil {
-		log.Println(".initialized file exists, do nothing")
 		return nil
 	}
 	db := database.GetDB()
@@ -130,7 +129,7 @@ func initialize() (err error) {
 	}
 	for _, cfg := range defaultConfigureItems {
 		if _, err := model.GetConfigure(cfg.names...); errors.Is(err, gorm.ErrRecordNotFound) {
-			_, err = model.CreateConfigure(cfg.value, cfg.dataType, cfg.names...)
+			_, err = model.CreateConfigure(cfg.value, "", cfg.dataType, cfg.names...)
 			if err != nil {
 				return err
 			}

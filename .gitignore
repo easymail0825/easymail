@@ -14,3 +14,4 @@ bower_components/
 /data/
 
 go.sum
+*.mmdb

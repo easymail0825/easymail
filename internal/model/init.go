@@ -1,4 +1,4 @@
-package account
+package model
 
 import (
 	"easymail/internal/database"
@@ -8,6 +8,5 @@ import (
 var db *gorm.DB
 
 func init() {
-	service := database.NewService()
-	db = service.GetDB()
+	db = database.GetDB()
 }

@@ -1,4 +1,4 @@
-package account
+package model
 
 import (
 	"errors"
@@ -14,7 +14,7 @@ import (
 /*
 Account
 @Desc
-account model
+model model
 */
 type Account struct {
 	ID                 int64  `gorm:"primaryKey;AUTO_INCREMENT" json:"id"`
@@ -31,7 +31,7 @@ type Account struct {
 	StorageQuota       int64     `json:"storage_quota"`
 }
 
-var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
+var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@([a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}|localhost)$`)
 
 // GeneratePassword create hashed password
 func GeneratePassword(password string) (string, error) {
@@ -74,14 +74,6 @@ func Authorize(username, password string) (acc *Account, err error) {
 	return acc, nil
 }
 
-func (account *Account) SaveEmail(email *Email) (err error) {
-	// check account_id, jobid, identity must exist
-	if email.AccountID <= 0 || email.JobID == "" || email.Identity == "" {
-		return errors.New("invalid email")
-	}
-	return db.Model(&email).Create(email).Error
-}
-
 func CreateAccount(domainID int64, name, password string, quota int64, expired time.Time) (err error) {
 	domain, err := FindDomainByID(domainID)
 	if err != nil || domain == nil || domain.ID <= 0 {
@@ -89,7 +81,7 @@ func CreateAccount(domainID int64, name, password string, quota int64, expired t
 	}
 
 	if _, err := FindAccountByName(name); err == nil {
-		return errors.New("account already exists")
+		return errors.New("model already exists")
 	}
 
 	passwordHash, err := GeneratePassword(password)
@@ -103,6 +95,7 @@ func CreateAccount(domainID int64, name, password string, quota int64, expired t
 		Domain:             domain,
 		Active:             true,
 		CreateTime:         time.Now(),
+		UpdateTime:         time.Now(),
 		StorageQuota:       quota,
 		PasswordExpireTime: expired,
 	}
@@ -116,7 +109,7 @@ func CreateAccount(domainID int64, name, password string, quota int64, expired t
 /*
 FindAccountByID
 @Desc
-Find an account by id.
+Find an model by id.
 */
 func FindAccountByID(id int64) (a *Account, err error) {
 	err = db.Model(&a).Where("id= ?", id).Scan(&a).Error
@@ -139,7 +132,7 @@ func GetAccountByID(i int) (*Account, error) {
 /*
 FindAccountByName
 @Desc
-Find an account by username with the given domain.
+Find an model by username with the given domain.
 if domain is not exist, use default domain.
 */
 func FindAccountByName(username string) (a *Account, err error) {
@@ -161,7 +154,7 @@ func FindAccountByName(username string) (a *Account, err error) {
 	a = &Account{}
 	err = db.Model(&a).Where("username=? AND domain_id=? AND active=? AND deleted=?", parts[0], domain.ID, true, false).Take(&a).Error
 	if err == gorm.ErrRecordNotFound {
-		return nil, errors.New("account not exists")
+		return nil, errors.New("model not exists")
 	}
 
 	return a, nil
@@ -213,19 +206,40 @@ func ToggleAccountActive(id int64) error {
 	return nil
 }
 
+func SaveEmail(email *Email) (err error) {
+	// check account_id, jobid, identity must exist
+	if email.AccountID <= 0 || email.JobID == "" || email.Identity == "" {
+		return errors.New("invalid email")
+	}
+	return db.Model(&email).Create(email).Error
+}
+
+func DeleteMail(accID int64, mailID int64) error {
+	return db.Model(&Email{}).Where("account_id = ? AND id = ?", accID, mailID).Updates(
+		map[string]interface{}{"Deleted": true, "DeleteTime": time.Now()},
+	).Error
+}
+
+func MoveMail(accID int64, mailID int64, fid FolderID) error {
+	return db.Model(&Email{}).Where("account_id = ? AND id = ?", accID, mailID).Update("folder_id", fid).Error
+}
+
 func DeleteAccount(id int64) (err error) {
 	// transmit
 	tx := db.Begin()
 
 	// mark mails deleted
-	err = MarkAccountMailDeleted(id, tx)
+	err = tx.Model(&Email{}).Where("account_id = ?", id).Updates(
+		map[string]interface{}{"Deleted": true, "DeleteTime": time.Now()},
+	).Error
+
 	if err != nil {
 		tx.Rollback()
 		return err
 	}
 
-	// mark account deleted
-	if err = tx.Model(&Account{}).Where("id = ?", id).Update("deleted", true).Error; err != nil {
+	// mark model deleted
+	if err = tx.Model(&Account{}).Where("id = ?", id).Updates(map[string]interface{}{"Deleted": true, "DeleteTime": time.Now()}).Error; err != nil {
 		tx.Rollback()
 		return err
 	}

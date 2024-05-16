@@ -97,9 +97,12 @@ func (home HomeController) ChangePassword(context *gin.Context) {
 func (home HomeController) Dashboard(c *gin.Context) {
 	sess := sessions.Default(c)
 	acc := sess.Get("model").(model.Account)
+	menu := createMenu()
 	c.HTML(http.StatusOK, "home_dashboard.html", gin.H{
 		"title":    "Dashboard of admin - Easymail",
 		"username": acc.Username,
 		"module":   "dashboard",
+		"page":     "home",
+		"menu":     menu,
 	})
 }

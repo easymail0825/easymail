@@ -38,11 +38,13 @@ func (a *AccountController) IndexDomain(c *gin.Context) {
 	if c.Request.Method == "GET" {
 		sess := sessions.Default(c)
 		username := sess.Get("userName")
-
+		menu := createMenu()
 		c.HTML(http.StatusOK, "domain_index.html", gin.H{
 			"title":    "Domain Management - Easymail",
 			"username": username,
-			"module":   "model",
+			"module":   "account",
+			"page":     "domain",
+			"menu":     menu,
 		})
 		return
 	} else if c.Request.Method == "POST" {
@@ -282,14 +284,16 @@ func (a *AccountController) IndexAccount(c *gin.Context) {
 				domainPairs = append(domainPairs, domainPair{ID: d.ID, Name: d.Name})
 			}
 		}
-
+		menu := createMenu()
 		c.HTML(http.StatusOK, "account_index.html", gin.H{
 			"title":      "Account Management - Easymail",
 			"domainID":   domain.ID,
 			"domainName": domain.Name,
 			"domains":    domainPairs,
 			"username":   username,
-			"module":     "model",
+			"module":     "account",
+			"page":       "account",
+			"menu":       menu,
 		})
 		return
 	} else if c.Request.Method == "POST" {

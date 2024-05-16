@@ -3,6 +3,7 @@ package milter
 import (
 	"bufio"
 	"bytes"
+	"easymail/internal/model"
 	"encoding/binary"
 	"errors"
 	"io"
@@ -16,6 +17,12 @@ import (
 var errCloseSession = errors.New("stop current milter processing")
 var serverProtocolVersion uint32 = 2
 
+type Feature struct {
+	Name     string
+	Value    string
+	DataType model.DataType
+}
+
 // session keeps session state during MTA communication
 type session struct {
 	actions  OptAction
@@ -24,6 +31,7 @@ type session struct {
 	headers  textproto.MIMEHeader
 	macros   map[string]string
 	milter   Milter
+	features []Feature
 }
 
 func NewSession(conn net.Conn, milter Milter, actions OptAction, protocol OptProtocol) *session {
@@ -34,6 +42,7 @@ func NewSession(conn net.Conn, milter Milter, actions OptAction, protocol OptPro
 		milter:   milter,
 		macros:   make(map[string]string),
 		headers:  make(textproto.MIMEHeader),
+		features: make([]Feature, 0),
 	}
 }
 
@@ -111,6 +120,7 @@ func (s *session) Process(msg *Message) (Response, error) {
 	case CodeAbort:
 		s.headers = nil
 		s.macros = nil
+		s.features = nil
 		return nil, nil
 
 	case CodeBody:
@@ -148,7 +158,7 @@ func (s *session) Process(msg *Message) (Response, error) {
 			family[protocolFamily],
 			port,
 			net.ParseIP(address),
-			newModifier(s))
+			newModifier(s), s.features)
 
 	case CodeMacro:
 		// define macros

@@ -30,12 +30,13 @@ func (a *MailLogController) Index(c *gin.Context) {
 	if c.Request.Method == "GET" {
 		sess := sessions.Default(c)
 		username := sess.Get("userName")
-
+		menu := createMenu()
 		c.HTML(http.StatusOK, "postfix_maillog.html", gin.H{
 			"title":    "Mail Logs Of Postfix - Easymail",
 			"username": username,
 			"module":   "postfix",
 			"page":     "mailLog",
+			"menu":     menu,
 		})
 		return
 	} else if c.Request.Method == "POST" {

@@ -1,4 +1,4 @@
-package account
+package model
 
 import (
 	"errors"
@@ -66,6 +66,7 @@ func CreateDomain(name, describe string) (err error) {
 		Description: describe,
 		Active:      true,
 		CreateTime:  time.Now(),
+		UpdateTime:  time.Now(),
 	}
 	if err := db.Create(domain).Error; err != nil {
 		return err
@@ -104,13 +105,20 @@ func ToggleDomainActive(id int64) error {
 	if err := db.First(&domain, id).Error; err != nil {
 		return err
 	}
-	if err := db.Model(&domain).Where("id", id).Update("active", !domain.Active).Error; err != nil {
+	if err := db.Model(&domain).Where("id", id).Updates(map[string]interface{}{
+		"Active":     !domain.Active,
+		"UpdateTime": time.Now(),
+	}).Error; err != nil {
 		return err
 	}
 	return nil
 }
 
-func DeleteDomain(id int64) (err error) {
+/*
+PhysicalDeleteDomain
+@Description: Physical delete the domain, include mails, model, but it will be deleted in background
+*/
+func PhysicalDeleteDomain(id int64) (err error) {
 	// transmit
 	tx := db.Begin()
 
@@ -137,4 +145,17 @@ func DeleteDomain(id int64) (err error) {
 	}
 
 	return nil
+}
+
+func DeleteDomain(id int64) error {
+	return db.Model(&Domain{}).Where("id = ?", id).Updates(Domain{Deleted: true, UpdateTime: time.Now(), Active: false}).Error
+}
+
+func LastUpdateDomain() time.Time {
+	d := Domain{}
+	err := db.Model(&d).Select("update_time").Order("update_time desc").First(&d).Error
+	if err == nil {
+		return d.UpdateTime
+	}
+	return time.Time{}
 }

@@ -14,12 +14,13 @@ func (qc *QueueController) Index(c *gin.Context) {
 	if c.Request.Method == "GET" {
 		sess := sessions.Default(c)
 		username := sess.Get("userName")
-
+		menu := createMenu()
 		c.HTML(http.StatusOK, "postfix_queue.html", gin.H{
 			"title":    "Mail Queue Of Postfix - Easymail",
 			"username": username,
 			"module":   "postfix",
 			"page":     "queue",
+			"menu":     menu,
 		})
 		return
 	} else if c.Request.Method == "POST" {

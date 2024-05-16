@@ -64,7 +64,7 @@ const (
 type Milter interface {
 	// Connect is called to provide SMTP connection data for incoming message.
 	// Suppress with OptNoConnect.
-	Connect(host string, family string, port uint16, addr net.IP, m *Modifier) (Response, error)
+	Connect(host string, family string, port uint16, addr net.IP, m *Modifier, f []Feature) (Response, error)
 
 	// Helo is called to process any HELO/EHLO related filters. Suppress with
 	// OptNoHelo.

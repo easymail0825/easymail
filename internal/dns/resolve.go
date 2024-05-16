@@ -18,6 +18,29 @@ func NewResolver(nameServer string) *Resolver {
 	}
 }
 
+func (r *Resolver) LookupPtr(ip string) (data []string, err error) {
+	c := new(dns.Client)
+	m := new(dns.Msg)
+	m.SetQuestion(ip, dns.TypePTR)
+
+	msg, _, err := c.Exchange(m, net.JoinHostPort(r.NameServer, "53"))
+	if err != nil {
+		return nil, err
+	}
+
+	if msg.Rcode != dns.RcodeSuccess {
+		return nil, fmt.Errorf("DNS query failed with code: %d", msg.Rcode)
+	}
+
+	for _, rr := range msg.Answer {
+		if ptr, ok := rr.(*dns.PTR); ok {
+			data = append(data, ptr.String())
+		}
+	}
+
+	return data, nil
+}
+
 func (r *Resolver) LookupMX(domain string) (data []string, err error) {
 	if !strings.HasSuffix(domain, ".") {
 		domain += "."
