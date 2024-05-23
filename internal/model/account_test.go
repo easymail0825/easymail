@@ -24,13 +24,22 @@ func TestCompare(t *testing.T) {
 
 func TestMigrate(t *testing.T) {
 	var err error
-	if err = db.AutoMigrate(&Domain{}, &Account{}, &Email{}); err != nil {
+	if err = db.AutoMigrate(&FilterRule{}, &FilterLog{}); err != nil {
 		t.Fail()
 	}
-	err = db.AutoMigrate(&Email{})
-	if err != nil {
-		t.Fail()
+
+	rule := FilterRule{
+		Describe:   "IP blacklist",
+		ClientIP:   "HasPrefix::211.136.192.",
+		Assembly:   "ip_1day_request>2",
+		CreateTime: time.Now(),
+		UpdateTime: time.Now(),
+		Status:     1,
+		Action:     AntispamActionReject,
+		AccountID:  2,
 	}
+
+	db.Create(&rule)
 }
 
 func TestCreateDomain(t *testing.T) {
@@ -105,4 +114,17 @@ func TestCreateEmail(t *testing.T) {
 	}
 	t.Logf("%s", buf.String())
 
+}
+
+func TestRuleConvert(t *testing.T) {
+	var rule FilterRule
+	err := db.Model(&rule).Where("id=?", 1).Scan(&rule).Error
+	if err != nil {
+		t.Fatal(err)
+	}
+	drl, err := rule.Convert2DRL()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(drl)
 }

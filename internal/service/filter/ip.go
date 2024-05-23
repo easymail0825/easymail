@@ -9,7 +9,7 @@ import (
 
 func QueryPtr(ip string) (string, error) {
 	ctx := context.Background()
-	key := fmt.Sprintf("%s:%s", ip, "ptr")
+	key := fmt.Sprintf("ip:ptr:%s", ip)
 
 	// get from redis first
 	if v, err := rdb.Get(ctx, key).Result(); err == nil {
@@ -111,8 +111,7 @@ func QueryRegion(ip net.IP) (country, province, city string, err error) {
 
 	// Get data of IP.
 	anyData := make(map[string]any)
-	recordNet, ok, err := geoip.LookupNetwork(ip, &anyData)
-	fmt.Println(recordNet)
+	_, ok, err := geoip.LookupNetwork(ip, &anyData)
 	if err != nil {
 		return "", "", "", err
 	}

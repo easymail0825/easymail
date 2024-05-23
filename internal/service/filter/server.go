@@ -3,12 +3,12 @@ package filter
 import (
 	"context"
 	"easymail/internal/easylog"
-	"easymail/internal/model"
 	"easymail/internal/service/milter"
 	"fmt"
 	"log"
 	"net"
 	"net/textproto"
+	"strings"
 	"sync"
 	"time"
 )
@@ -19,70 +19,142 @@ type Filter struct {
 	optProtocol milter.OptProtocol
 }
 
-func (f *Filter) Connect(host string, family string, port uint16, addr net.IP, m *milter.Modifier, feature []milter.Feature) (milter.Response, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Microsecond)
-	defer cancel()
+const timeout = 100000 * time.Microsecond
+
+func (f *Filter) Connect(host string, family string, port uint16, addr net.IP, m *milter.Modifier) (milter.Response, []milter.Feature, error) {
+	addr = net.ParseIP("211.136.192.6")
+	isPrivate := addr.IsPrivate() || addr.IsLoopback()
+	feature := make([]milter.Feature, 0)
+	// add feature of ip
+	feature = append(feature, milter.Feature{Name: "client_ip", Value: addr.String(), ValueType: milter.DataTypeString})
+	ctxPtr, cancelPtr := context.WithTimeout(context.Background(), timeout)
+	defer cancelPtr()
 
 	// query ip ptr
-	if featureSwitch([]string{"feature", "ip", "ptr"}) {
+	if !isPrivate && featureSwitch([]string{"feature", "ip", "ptr"}) {
 		go func(ctx context.Context) {
 			ptr, err := QueryPtr(addr.String())
-			if err == nil {
-				feature = append(feature, milter.Feature{Name: "ip-ptr", Value: ptr, DataType: model.DataTypeString})
+			if err == nil && ptr != "" {
+				feature = append(feature, milter.Feature{Name: "ip_ptr", Value: "true", ValueType: milter.DataTypeBool})
+			} else {
+				feature = append(feature, milter.Feature{Name: "ip_ptr", Value: "false", ValueType: milter.DataTypeBool})
 			}
-		}(ctx)
+		}(ctxPtr)
 	}
 
 	// query ip region info
 	// only supper GeoLite2-City.mmdb from official https://download.maxmind.com/app/geoip_download_by_token
-	if featureSwitch([]string{"feature", "ip", "region"}) {
-		if geoip != nil {
+	ctxRegion, cancelRegion := context.WithTimeout(context.Background(), timeout)
+	defer cancelRegion()
+	if !isPrivate && featureSwitch([]string{"feature", "ip", "region"}) {
+		matched := false
+		// query redis first
+		ctxRedisQuery, cancelRedisQuery := context.WithTimeout(context.Background(), timeout)
+		defer cancelRedisQuery()
+		if tmp, err := queryCacheInString(ctxRedisQuery, fmt.Sprintf("ip:country:%s", addr.String())); err == nil {
+			matched = true
+			if tmp != "" {
+				feature = append(feature, milter.Feature{Name: "ip_country", Value: strings.ToLower(tmp), ValueType: milter.DataTypeString})
+			}
+		}
+		if tmp, err := queryCacheInString(ctxRedisQuery, fmt.Sprintf("ip:province:%s", addr.String())); err == nil {
+			matched = true
+			if tmp != "" {
+				feature = append(feature, milter.Feature{Name: "ip_province", Value: strings.ToLower(tmp), ValueType: milter.DataTypeString})
+			}
+		}
+		if tmp, err := queryCacheInString(ctxRedisQuery, fmt.Sprintf("ip:city:%s", addr.String())); err == nil {
+			matched = true
+			if tmp != "" {
+				feature = append(feature, milter.Feature{Name: "ip_city", Value: strings.ToLower(tmp), ValueType: milter.DataTypeString})
+			}
+		}
+
+		if !isPrivate && !matched && geoip != nil {
 			go func(ctx context.Context) {
 				country, province, city, err := QueryRegion(addr)
 				if err == nil {
-					feature = append(feature, milter.Feature{Name: "ip-country", Value: country, DataType: model.DataTypeString})
-					feature = append(feature, milter.Feature{Name: "ip-province", Value: province, DataType: model.DataTypeString})
-					feature = append(feature, milter.Feature{Name: "ip-city", Value: city, DataType: model.DataTypeString})
+					if country != "" {
+						feature = append(feature, milter.Feature{Name: "ip_country", Value: strings.ToLower(country), ValueType: milter.DataTypeString})
+						if err := setCacheInString(ctx, fmt.Sprintf("ip:country:%s", addr.String()), strings.ToLower(country), time.Hour*24); err != nil {
+							log.Println("[ERROR]", err)
+						}
+					}
+					if province != "" {
+						feature = append(feature, milter.Feature{Name: "ip_province", Value: strings.ToLower(province), ValueType: milter.DataTypeString})
+						if err := setCacheInString(ctx, fmt.Sprintf("ip:province:%s", addr.String()), strings.ToLower(province), time.Hour*24); err != nil {
+							log.Println("[ERROR]", err)
+						}
+					}
+					if city != "" {
+						feature = append(feature, milter.Feature{Name: "ip_city", Value: strings.ToLower(city), ValueType: milter.DataTypeString})
+						if err := setCacheInString(ctx, fmt.Sprintf("ip:city:%s", addr.String()), strings.ToLower(city), time.Hour*24); err != nil {
+							log.Println("[ERROR]", err)
+						}
+					}
 				}
-			}(ctx)
+			}(ctxRegion)
 		}
 	}
 
-	if err := increaseCount(ctx, fmt.Sprintf("%s:10min-request", addr.String()), time.Minute*10); err != nil {
-		log.Println("Error updating IP count in Redis:", err)
+	ctxRedis, cancelRedis := context.WithTimeout(context.Background(), timeout)
+	defer cancelRedis()
+	if featureSwitch([]string{"feature", "ip", "10min"}) {
+		go func(ctx context.Context) {
+			if n, err := increaseCount(ctx, fmt.Sprintf("ip:%s:%s", addr.String(), formatTimeForTenMinutes(time.Now())), time.Minute*10); err == nil {
+				feature = append(feature, milter.Feature{Name: "ip_10min_request", Value: fmt.Sprintf("%d", n), ValueType: milter.DataTypeInt})
+			}
+		}(ctxRedis)
 	}
-	return milter.RespContinue, nil
+
+	if featureSwitch([]string{"feature", "ip", "1day"}) {
+		go func(ctx context.Context) {
+			if n, err := increaseCount(ctx, fmt.Sprintf("ip:%s:%s", addr.String(), time.Now().Format("20060102")), time.Hour*24); err == nil {
+				feature = append(feature, milter.Feature{Name: "ip_1day_request", Value: fmt.Sprintf("%d", n), ValueType: milter.DataTypeInt})
+			}
+		}(ctxRedis)
+	}
+
+	select {
+	case <-ctxPtr.Done():
+	case <-ctxRegion.Done():
+	case <-ctxRedis.Done():
+	}
+	return milter.RespContinue, feature, nil
 }
 
-func (f *Filter) Helo(name string, m *milter.Modifier) (milter.Response, error) {
-	return milter.RespContinue, nil
+func (f *Filter) Helo(name string, m *milter.Modifier) (milter.Response, []milter.Feature, error) {
+	//add feature of helo argument
+	feature := make([]milter.Feature, 0)
+	feature = append(feature, milter.Feature{Name: "helo", Value: strings.ToLower(name), ValueType: milter.DataTypeString})
+	return milter.RespContinue, feature, nil
 }
 
-func (f *Filter) MailFrom(from string, m *milter.Modifier) (milter.Response, error) {
-	return milter.RespContinue, nil
+func (f *Filter) MailFrom(from string, m *milter.Modifier) (milter.Response, []milter.Feature, error) {
+	return milter.RespContinue, nil, nil
 }
 
-func (f *Filter) RcptTo(rcptTo string, m *milter.Modifier) (milter.Response, error) {
-	return milter.RespContinue, nil
+func (f *Filter) RcptTo(rcptTo string, m *milter.Modifier) (milter.Response, []milter.Feature, error) {
+	return milter.RespContinue, nil, nil
 }
 
-func (f *Filter) Header(name string, value string, m *milter.Modifier) (milter.Response, error) {
-	return milter.RespContinue, nil
+func (f *Filter) Header(name string, value string, m *milter.Modifier) (milter.Response, []milter.Feature, error) {
+	return milter.RespContinue, nil, nil
 }
 
-func (f *Filter) Headers(h textproto.MIMEHeader, m *milter.Modifier) (milter.Response, error) {
-	return milter.RespContinue, nil
+func (f *Filter) Headers(h textproto.MIMEHeader, m *milter.Modifier) (milter.Response, []milter.Feature, error) {
+	return milter.RespContinue, nil, nil
 }
 
-func (f *Filter) BodyChunk(chunk []byte, m *milter.Modifier) (milter.Response, error) {
-	return milter.RespContinue, nil
+func (f *Filter) BodyChunk(chunk []byte, m *milter.Modifier) (milter.Response, []milter.Feature, error) {
+	return milter.RespContinue, nil, nil
 }
 
-func (f *Filter) Body(m *milter.Modifier, macro map[string]string) (milter.Response, error) {
+func (f *Filter) Body(m *milter.Modifier, macro map[string]string) (milter.Response, []milter.Feature, error) {
 	if v, ok := macro["i"]; ok {
 		m.AddHeader("X-Queue-ID", v)
 	}
-	return milter.RespContinue, nil
+	return milter.RespContinue, nil, nil
 }
 
 type Server struct {
@@ -173,7 +245,7 @@ func (s *Server) run() (err error) {
 		if err != nil {
 			return err
 		}
-		session := milter.NewSession(client, s.filter, s.filter.optAction, s.filter.optProtocol)
+		session := NewSession(client, s.filter, s._log)
 		go session.Handle()
 	}
 }

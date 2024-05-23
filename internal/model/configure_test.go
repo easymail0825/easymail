@@ -43,7 +43,7 @@ func TestAddConfigure(t *testing.T) {
 	defaultConfigureItems := []ConfigureItem{
 		//{[]string{"feature", "ip", "ptr"}, "true", DataTypeBool, "lookup ptr record of ip"},
 		//{[]string{"feature", "ip", "region"}, "true", DataTypeBool, "lookup region info of ip"},
-		{[]string{"feature", "ip", "region-city-mmdb"}, "GeoLite2-City.mmdb", DataTypeString, "path of mmdb"},
+		//{[]string{"feature", "ip", "region-city-mmdb"}, "GeoLite2-City.mmdb", DataTypeString, "path of mmdb"},
 		//{[]string{"feature", "ip", "rbl"}, "true", DataTypeBool, "query rbl for ip"},
 		//{[]string{"network", "rbl", "sorbs"}, "rbl/sorbs", DataTypeString, "sorbs rbl"},
 		//{[]string{"feature", "ip", "10min"}, "true", DataTypeBool, "ip total requests in 10 min"},

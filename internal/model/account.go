@@ -14,7 +14,6 @@ import (
 /*
 Account
 @Desc
-model model
 */
 type Account struct {
 	ID                 int64  `gorm:"primaryKey;AUTO_INCREMENT" json:"id"`
