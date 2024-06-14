@@ -75,7 +75,7 @@ func (p *Process) Name() string {
 }
 
 func (p *Process) run() {
-	cfg, err := model.GetConfigure("postfix", "log", "mail")
+	cfg, err := model.GetConfigureByNames("postfix", "log", "mail")
 	if err != nil {
 		p._log.Fatal(err)
 	}

@@ -1,0 +1,619 @@
+{{ template "layout_main.html" .}}
+
+{{ block "header".}}
+
+{{end}}
+
+{{ block "content" .}}
+<div class="row">
+    <div class="col-12">
+        <ul class="nav nav-tabs" id="myTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="metric-tab" data-bs-toggle="tab" data-bs-target="#pane_metric"
+                        type="button"
+                        role="tab" aria-controls="metric" aria-selected="true">Metric
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="keyword-tab" data-bs-toggle="tab" data-bs-target="#pane_keyword"
+                        type="button"
+                        role="tab" aria-controls="keyword" aria-selected="false">Keyword
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="assembly-tab" data-bs-toggle="tab" data-bs-target="#pane_assembly"
+                        type="button"
+                        role="tab" aria-controls="assembly" aria-selected="false">Assembly
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="field-tab" data-bs-toggle="tab" data-bs-target="#pane_field"
+                        type="button"
+                        role="tab" aria-controls="pane_field" aria-selected="false">Field
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content">
+            <div class="tab-pane fade  show active" id="pane_metric" role="tabpanel" aria-labelledby="metric-tab">
+                <div class="row m-3">
+                    <div class="col-12">
+                        <table id="metricTable" class="display" style="width:100%">
+                            <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Describe</th>
+                                <th>Primary Field</th>
+                                <th>Secondary Field</th>
+                                <th>Operation</th>
+                                <th>Action</th>
+                                <th>Interval</th>
+                                <th>Status</th>
+                                <th>Create</th>
+                                <th>Update</th>
+                                <th>-</th>
+                            </tr>
+                            </thead>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="pane_field" role="tabpanel" aria-labelledby="field-tab">
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <table id="fieldTable" class="display" style="width:100%">
+                            <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Stage</th>
+                                <th>Describe</th>
+                                <th>Status</th>
+                                <th>Create</th>
+                                <th>Update</th>
+                                <th>Delete</th>
+                            </tr>
+                            </thead>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- add metric  modal-->
+<div class="modal fade" id="createMetricModal" tabindex="-1" role="dialog"
+     aria-labelledby="createMetricModalLabel"
+     aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <form id="createMetricForm" onsubmit="return false;">
+                <input type="hidden" name="metric_id" id="metric_id">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modal_title">Add Metric</h5>
+                    <button type="button" class="btn" data-bs-dismiss="modal" aria-label="Close">
+                        <i class="fa fa-times-circle"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="row mb-2">
+                        <div class="col-12">
+                            <div class="form-group">
+                                <label for="name">Metric Name</label>
+                                <input type="text" class="form-control" id="name" name="name"
+                                       placeholder="eg:a_b_c, no whitespace" required value="">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-12">
+                            <div class="form-group">
+                                <label for="description">Describe</label>
+                                <input type="text" class="form-control" id="description" name="description"
+                                       placeholder="" required value="">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-6">
+                            <div class="form-group">
+                                <label for="primary_field">Primary Field</label>
+                                <select class="form-control" id="primary_field" name="primary_field" required>
+                                    <option value="0"></option>
+                                    {{ range $f := .fields}}
+                                    <option value="{{$f.ID}}">{{$f.Name}}</option>
+                                    {{end}}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="form-group">
+                                <label for="secondary_field">Second Field</label>
+                                <select class="form-control" id="secondary_field" name="secondary_field">
+                                    <option value="0"></option>
+                                    {{ range $f := .fields}}
+                                    <option value="{{$f.ID}}">{{$f.Name}}</option>
+                                    {{end}}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-12">
+                            <div class="form-group">
+                                <label for="operation">Operation Of Fields</label>
+                                <select class="form-control" id="operation" name="operation">
+                                    <option value="0" selected>Count</option>
+                                    <option value="1">Collect</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-12">
+                            <div class="form-group">
+                                <label for="operation">Filter Category</label>
+                                <select class="form-control" id="category" name="category">
+                                    <option value="0" selected>All</option>
+                                    <option value="1">Unknown</option>
+                                    <option value="2">Ham</option>
+                                    <option value="3">Spam</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-12">
+                            <div class="form-group">
+                                <label for="operation">Interval</label>
+                                <div class="input-group mb-3">
+                                    <input type="text" id="interval" name="interval" class="form-control" placeholder=""
+                                           aria-label=""
+                                           aria-describedby="interval">
+                                    <div class="input-group-append">
+                                        <select class="select" id="unit" name="unit">
+                                            <option value="0" selected>Minute</option>
+                                            <option value="1">Hour</option>
+                                            <option value="2">Day</option>
+                                            <option value="3">Week</option>
+                                            <option value="4">Month</option>
+                                            <option value="5">Year</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="submit" class="btn btn-primary" id="submitBtn">Submit</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{end}}
+
+{{block "script" .}}
+
+<script>
+    $(document).ready(function () {
+
+        // field table
+        let fieldTable = new DataTable('#fieldTable', {
+            "processing": true,
+            "serverSide": true,
+            "searching": false,
+            "order": [[1, "asc"]],
+            "ajax": {
+                "url": "/filter/feature/field",
+                "type": "POST",
+                "contentType": "application/json",
+                "data": function (d) {
+                    return JSON.stringify({
+                        "draw": d.draw,
+                        "columns": d.columns,
+                        "order": d.order,
+                        "start": d.start,
+                        "length": d.length,
+                        "search": d.search,
+                    });
+                }
+            },
+            'columns': [
+                {'data': 'id'},
+                {'data': 'name'},
+                {
+                    'data': 'stage',
+                    'render': function (data, type, row, meta) {
+                        if (data === 0) {
+                            return "Connect"
+                        } else if (data === 1) {
+                            return "Helo"
+                        } else if (data === 2) {
+                            return "MailFrom"
+                        } else if (data === 3) {
+                            return "MailFrom"
+                        } else if (data === 4) {
+                            return "Header"
+                        } else if (data === 5) {
+                            return "Data"
+                        } else {
+                            return "unknown"
+                        }
+                    }
+                },
+                {'data': 'description'},
+                {
+                    'data': 'status',
+                    'render': function (data, type, row, meta) {
+                        if (data === 0) {
+                            return "inactive"
+                        } else if (data === 1) {
+                            return "active"
+                        } else if (data === 2) {
+                            return "deleted"
+                        } else {
+                            return "unknown"
+                        }
+                    }
+                },
+                {
+                    'data': 'create_time',
+                    'render': function (data, type, row, meta) {
+                        const momentDate = moment(data);
+                        return momentDate.format('YYYY-MM-DD HH:mm:ss');
+                    }
+                },
+                {
+                    'data': 'update_time',
+                    'render': function (data, type, row, meta) {
+                        const momentDate = moment(data);
+                        return momentDate.format('YYYY-MM-DD HH:mm:ss');
+                    }
+                },
+                {
+                    'data': 'delete_time',
+                    'render': function (data, type, row, meta) {
+                        const momentDate = moment(data);
+                        return momentDate.format('YYYY-MM-DD HH:mm:ss');
+                    }
+                },
+            ],
+
+        });
+
+        // metric table
+        let metricTable = new DataTable('#metricTable', {
+            "processing": true,
+            "serverSide": true,
+            "searching": false,
+            "order": [[0, "desc"]],
+            "layout": {
+                topStart: 'pageLength',
+                topEnd: 'buttons',
+                bottomStart: 'info',
+                bottomEnd: 'paging'
+            },
+            buttons: [
+                {
+                    text: '<i class="fa fa-plus-circle me-2"></i>Add Metric',
+                    className: 'btn-primary',
+                    id: 'btn_add_metric',
+                    action: function (e, dt, node, config) {
+                        document.getElementById('createMetricForm').reset();
+                        $("#modal_title").text("Add Metric")
+                        $("#metric_id").val("0")
+                        $('#createMetricModal').modal('show');
+                    }
+                },
+            ],
+            "ajax": {
+                "url": "/filter/feature/metric",
+                "type": "POST",
+                "contentType": "application/json",
+                "data": function (d) {
+                    return JSON.stringify({
+                        "draw": d.draw,
+                        "columns": d.columns,
+                        "order": d.order,
+                        "start": d.start,
+                        "length": d.length,
+                        "search": d.search,
+                    });
+                }
+            },
+            'columns': [
+                {'data': 'id'},
+                {'data': 'name'},
+                {'data': 'description'},
+                {'data': 'primary_field_name'},
+                {'data': 'secondary_field_name'},
+                {
+                    'data': 'operation',
+                    'render': function (data, type, row, meta) {
+                        if (data === 0) {
+                            return "Count"
+                        } else if (data === 1) {
+                            return "Collect"
+                        } else {
+                            return "Unknown"
+                        }
+                    }
+                },
+                {
+                    'data': 'category',
+                    'render': function (data, type, row, meta) {
+                        if (data === 0) {
+                            return "All"
+                        } else if (data === 1) {
+                            return "Unknown"
+                        } else if (data === 2) {
+                            return "Ham"
+                        } else {
+                            return "Spam"
+                        }
+                    }
+                },
+                {
+                    'data': 'interval',
+                    'render': function (data, type, row, meta) {
+                        let unit = undefined
+                        if (row.unit === 0) {
+                            unit = "Minutes"
+                        } else if (row.unit === 1) {
+                            unit = "Hours"
+                        } else if (row.unit === 2) {
+                            unit = "Days"
+                        } else if (row.unit === 3) {
+                            unit = "Weeks"
+                        } else if (row.unit === 4) {
+                            unit = "Months"
+                        } else if (row.unit === 5) {
+                            unit = "Years"
+                        }
+                        return data + ' ' + unit
+                    }
+                },
+                {
+                    'data': 'status',
+                    'render': function (data, type, row, meta) {
+                        if (data === 0) {
+                            return "inactive"
+                        } else if (data === 1) {
+                            return "active"
+                        } else if (data === 2) {
+                            return "deleted"
+                        } else {
+                            return "unknown"
+                        }
+                    }
+                },
+                {
+                    'data': 'createTime',
+                    'render': function (data, type, row, meta) {
+                        const momentDate = moment(data);
+                        return momentDate.format('YYYY-MM-DD HH:mm:ss');
+                    }
+                },
+                {
+                    'data': 'updateTime',
+                    'render': function (data, type, row, meta) {
+                        const momentDate = moment(data);
+                        return momentDate.format('YYYY-MM-DD HH:mm:ss');
+                    }
+                },
+                {
+                    'data': null,
+                    'render': function (data, type, row, meta) {
+                        if (type === 'display') {
+                            let activeButton = '';
+                            let editButton = '';
+                            let deleteButton = '';
+                            if (data.status === 0) {
+                                activeButton = '<button class="btn btn-link btn-active" data-id="' + data.id + '">enable</button>'
+                                editButton = '<button class="btn btn-link btn-edit" data-id="' + data.id + '"' + '>edit</button>';
+                                deleteButton = '<button class="btn btn-link btn-delete" data-id="' + data.id + '">delete</button>';
+                            } else if (data.status === 1) {
+                                activeButton = '<button class="btn btn-link btn-active" data-id="' + data.id + '">disable</button>'
+                                deleteButton = '<button class="btn btn-link btn-delete" data-id="' + data.id + '">delete</button>';
+                            }
+                            return activeButton + editButton + deleteButton;
+                        }
+                        return data;
+                    }
+                },
+            ],
+        });
+
+        // add metric form
+        $.validator.addMethod("checkMetricName", function (value, element, params) {
+            let re = /^([A-Za-z0-9]+_)+[A-Za-z0-9]+$/;
+            return this.optional(element) || (re.test(value));
+        }, "input like a_b_c");
+        $.validator.addMethod("checkSecondField", function (value, element, params) {
+            let pf = parseInt($("#primary_field").val())
+            let v = parseInt(value)
+            let m = true
+            if (v > 0) {
+                if (pf < 1) {
+                    m = false
+                }
+            }
+            return this.optional(element) || m
+        }, "please select primary field first!");
+        $.validator.addMethod("checkOperation", function (value, element, params) {
+            let pf = parseInt($("#primary_field").val())
+            let sf = parseInt($("#secondary_field").val())
+            let v = parseInt(value)
+            let m = true
+            if (pf > 0 && pf === sf) {
+                m = false
+            } else if (v === 0) {
+                if (pf < 1 || sf > 0) {
+                    m = false
+                }
+            } else if (v === 1) {
+                if (pf < 1 || sf < 1) {
+                    m = false
+                }
+            }
+            return this.optional(element) || m
+        }, "Count only need primary field, collect need primary and second fields");
+
+        $("#createMetricForm").validate({
+            rules: {
+                name: {
+                    required: true,
+                    checkMetricName: true,
+                    maxlength: 255,
+                },
+                description: {
+                    required: true,
+                    maxlength: 255,
+                },
+                primary_field: {
+                    min: 0,
+                    required: true,
+                },
+                secondary_field: {
+                    checkSecondField: true,
+                },
+                operation: {
+                    required: true,
+                    checkOperation: true,
+                },
+                interval: {
+                    required: true,
+                    number: true,
+                }
+            },
+            messages: {},
+            submitHandler: function (form) {
+                let formData = $(form).parseForm()
+                formData.id = Number(formData.metric_id)
+                formData.category = Number(formData.category)
+                formData.interval = Number(formData.interval)
+                formData.operation = Number(formData.operation)
+                formData.primary_field = Number(formData.primary_field)
+                formData.secondary_field = Number(formData.secondary_field)
+                formData.unit = Number(formData.unit)
+                $.ajax({
+                    type: "POST",
+                    url: "/filter/feature/metric/create",
+                    data: JSON.stringify(formData),
+                    contentType: 'application/json',
+                    success: function (data) {
+                        if (data.success) {
+                            showMsg(data.success)
+                            $('#createMetricModal').modal('hide');
+                            $(form).validate().resetForm();
+                            metricTable.ajax.reload();
+                        } else {
+                            showMsg(data.error)
+                        }
+                    },
+                    error: function (xhr, status, error) {
+                        showMsg("Request failed:" + error)
+                    }
+                })
+                return false
+            }
+        })
+
+        // delete metric
+        $("#metricTable").on("click", ".btn-delete", function () {
+            let id = $(this).data("id")
+            $.confirm({
+                title: 'Are you sure you want to delete it?',
+                content: 'When delete the metric, all feature rules contain it will not work！',
+                buttons: {
+                    confirm: {
+                        text: "Conform",
+                        action: function () {
+                            $.ajax({
+                                url: "/filter/feature/metric/delete?id=" + id,
+                                type: "GET",
+                                success: function (data) {
+                                    if (data.success) {
+                                        $.toast("Delete Success!");
+                                        metricTable.ajax.reload()
+                                    } else {
+                                        $.toast("Delete Failed: " + data.error)
+                                    }
+                                },
+                                error: function (xhr, status, error) {
+                                    console.log("Request Failed: ", error)
+                                }
+                            })
+                        },
+                    },
+                    cancel: {
+                        text: "Cancel",
+                    }
+                },
+            });
+        })
+
+
+        // active/suspect metric
+        $("#metricTable").on("click", ".btn-active", function () {
+            let id = $(this).data("id")
+            $.ajax({
+                url: "/filter/feature/metric/toggle?id=" + id,
+                type: "GET",
+                success: function (data) {
+                    if (data.success) {
+                        showMsg("Operation Success");
+                        metricTable.ajax.reload()
+                    } else {
+                        showMsg("Operation Failed: " + data.error)
+                    }
+                },
+                error: function (xhr, status, error) {
+                    console.log("Request Failed: ", error)
+                }
+            })
+        })
+
+        // edit account
+        $("#metricTable").on("click", ".btn-edit", function () {
+            let id = $(this).data("id")
+            $.ajax({
+                url: "/filter/feature/metric/edit?id=" + id,
+                type: "GET",
+                success: function (data) {
+                    if (data.success) {
+                        let metric = data.data
+                        $("#metric_id").val(id)
+                        $("#modal_title").text("Edit Metric")
+                        $("#name").val(metric.name)
+                        $("#description").val(metric.description)
+                        $("#primary_field").val(metric.primary_field_id)
+                        $("#secondary_field").val(metric.secondary_field_id)
+                        $("#operation").val(metric.operation)
+                        $("#category").val(metric.category)
+                        $("#interval").val(metric.interval)
+                        $("#unit").val(metric.unit)
+                        $("#createMetricModal").modal("show")
+                    } else {
+                        showMsg("Operation Failed: " + data.error)
+                    }
+                },
+                error: function (xhr, status, error) {
+                    console.log("Request Failed: ", error)
+                }
+            })
+        })
+
+
+    })
+</script>
+{{end}}

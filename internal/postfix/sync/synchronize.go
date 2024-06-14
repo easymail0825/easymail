@@ -15,7 +15,7 @@ SynchronizeVirtualDomain
 @Date: 2024/4/23 11:04 AM
 */
 func SynchronizeVirtualDomain() error {
-	c, err := model.GetConfigure("postfix", "configure", "virtual_mailbox_domains")
+	c, err := model.GetConfigureByNames("postfix", "configure", "virtual_mailbox_domains")
 	if err != nil {
 		return err
 	}
@@ -46,7 +46,7 @@ func SynchronizeVirtualDomain() error {
 	}
 
 	// run postmap to make hash
-	c, err = model.GetConfigure("postfix", "execute", "postmap")
+	c, err = model.GetConfigureByNames("postfix", "execute", "postmap")
 	if err != nil {
 		return err
 	}
@@ -60,7 +60,7 @@ func SynchronizeVirtualDomain() error {
 	log.Printf("postmap run result:\n%s\n", string(out))
 
 	// last, should reload postfix
-	c, err = model.GetConfigure("postfix", "execute", "postfix")
+	c, err = model.GetConfigureByNames("postfix", "execute", "postfix")
 	if err != nil {
 		return err
 	}

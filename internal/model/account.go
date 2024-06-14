@@ -73,30 +73,30 @@ func Authorize(username, password string) (acc *Account, err error) {
 	return acc, nil
 }
 
-func CreateAccount(domainID int64, name, password string, quota int64, expired time.Time) (err error) {
-	domain, err := FindDomainByID(domainID)
+func CreateAccount(req CreateAccountRequest) (err error) {
+	domain, err := FindDomainByID(req.DomainID)
 	if err != nil || domain == nil || domain.ID <= 0 {
 		return errors.New("domain not exists")
 	}
 
-	if _, err := FindAccountByName(name); err == nil {
+	if _, err := FindAccountByName(req.Name); err == nil {
 		return errors.New("model already exists")
 	}
 
-	passwordHash, err := GeneratePassword(password)
+	passwordHash, err := GeneratePassword(req.Password)
 	if err != nil {
 		return nil
 	}
 
 	account := &Account{
-		Username:           name,
+		Username:           req.Name,
 		Password:           passwordHash,
 		Domain:             domain,
 		Active:             true,
 		CreateTime:         time.Now(),
 		UpdateTime:         time.Now(),
-		StorageQuota:       quota,
-		PasswordExpireTime: expired,
+		StorageQuota:       req.StorageQuota,
+		PasswordExpireTime: req.PasswordExpiredTime,
 	}
 	if err := db.Create(account).Error; err != nil {
 		return err
@@ -164,7 +164,7 @@ func CountDomainAccount(id int64) (total int64, err error) {
 	return total, err
 }
 
-func Index(did, status int, keyword, orderFiled, orderDir string, page, pageSize int) (int64, []Account, error) {
+func Index(did, status int, keyword, orderField, orderDir string, page, pageSize int) (int64, []Account, error) {
 	accounts := make([]Account, 0)
 	query := db.Model(&accounts).Where("domain_id=?", did)
 	if keyword != "" {
@@ -183,8 +183,8 @@ func Index(did, status int, keyword, orderFiled, orderDir string, page, pageSize
 	var total int64
 	query.Count(&total)
 
-	if orderFiled != "" && orderDir != "" {
-		query = query.Order(fmt.Sprintf("%s %s", orderFiled, orderDir))
+	if orderField != "" && orderDir != "" {
+		query = query.Order(fmt.Sprintf("%s %s", orderField, orderDir))
 	}
 	query = query.Offset(page).Limit(pageSize)
 	err := query.Find(&accounts).Error
@@ -194,7 +194,7 @@ func Index(did, status int, keyword, orderFiled, orderDir string, page, pageSize
 	return total, accounts, nil
 }
 
-func ToggleAccountActive(id int64) error {
+func ToggleAccount(id int64) error {
 	account := Account{}
 	if err := db.First(&account, id).Error; err != nil {
 		return err
@@ -251,33 +251,33 @@ func DeleteAccount(id int64) (err error) {
 	return nil
 }
 
-func EditAccount(id int64, password string, storageQuota int64, passwordExpiredTime time.Time) error {
+func EditAccount(req EditAccountRequest) error {
 	tx := db.Begin()
-	if len(password) >= 6 && len(password) <= 64 {
-		hashPassword, err := GeneratePassword(password)
+	if len(req.Password) >= 6 && len(req.Password) <= 64 {
+		hashPassword, err := GeneratePassword(req.Password)
 		if err != nil {
 			return err
 		}
-		if err := tx.Model(&Account{}).Where("id = ?", id).Update("password", hashPassword).Error; err != nil {
+		if err := tx.Model(&Account{}).Where("id = ?", req.ID).Update("password", hashPassword).Error; err != nil {
 			tx.Rollback()
 			return err
 		}
 	}
 
-	if storageQuota >= -1 && storageQuota < 1000000 {
-		if err := tx.Model(&Account{}).Where("id = ?", id).Update("storage_quota", storageQuota).Error; err != nil {
+	if req.StorageQuotaNumber >= -1 && req.StorageQuotaNumber < 1000000 {
+		if err := tx.Model(&Account{}).Where("id = ?", req.ID).Update("storage_quota", req.StorageQuotaNumber).Error; err != nil {
 			tx.Rollback()
 			return err
 		}
 	}
 
-	if passwordExpiredTime.IsZero() {
-		if err := tx.Model(&Account{}).Where("id = ?", id).Update("password_expire_time", nil).Error; err != nil {
+	if req.PasswordExpiredTime.IsZero() {
+		if err := tx.Model(&Account{}).Where("id = ?", req.ID).Update("password_expire_time", nil).Error; err != nil {
 			tx.Rollback()
 			return err
 		}
 	} else {
-		if err := tx.Model(&Account{}).Where("id = ?", id).Update("password_expire_time", passwordExpiredTime).Error; err != nil {
+		if err := tx.Model(&Account{}).Where("id = ?", req.ID).Update("password_expire_time", req.PasswordExpiredTime).Error; err != nil {
 			tx.Rollback()
 			return err
 		}

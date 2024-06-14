@@ -3,12 +3,13 @@ package filter
 import (
 	"context"
 	"easymail/internal/easylog"
+	"easymail/internal/model"
+	"easymail/internal/preprocessing"
 	"easymail/internal/service/milter"
 	"fmt"
-	"log"
 	"net"
 	"net/textproto"
-	"strings"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -21,156 +22,258 @@ type Filter struct {
 
 const timeout = 100000 * time.Microsecond
 
-func (f *Filter) Connect(host string, family string, port uint16, addr net.IP, m *milter.Modifier) (milter.Response, []milter.Feature, error) {
-	addr = net.ParseIP("211.136.192.6")
-	isPrivate := addr.IsPrivate() || addr.IsLoopback()
+func (f *Filter) Connect(host string, addr net.IP, payload map[string]string, m *milter.Modifier) (milter.Response, []milter.Feature, error) {
 	feature := make([]milter.Feature, 0)
-	// add feature of ip
-	feature = append(feature, milter.Feature{Name: "client_ip", Value: addr.String(), ValueType: milter.DataTypeString})
-	ctxPtr, cancelPtr := context.WithTimeout(context.Background(), timeout)
-	defer cancelPtr()
 
-	// query ip ptr
-	if !isPrivate && featureSwitch([]string{"feature", "ip", "ptr"}) {
-		go func(ctx context.Context) {
-			ptr, err := QueryPtr(addr.String())
-			if err == nil && ptr != "" {
-				feature = append(feature, milter.Feature{Name: "ip_ptr", Value: "true", ValueType: milter.DataTypeBool})
-			} else {
-				feature = append(feature, milter.Feature{Name: "ip_ptr", Value: "false", ValueType: milter.DataTypeBool})
+	if metrics, err := model.GetFilterMetricByStage(model.FilterStageConnect); err == nil {
+		for _, metric := range metrics {
+			if max(metric.PrimaryField.Stage, metric.SecondaryField.Stage) != model.FilterStageConnect {
+				continue
 			}
-		}(ctxPtr)
+			if metric.Category == model.FilterCategoryAll {
+				key := fmt.Sprintf("%s:%s", metric.MakeFilterMetricKey(), addr.String())
+				if cnt, err := increaseCount(context.Background(), key, metric.MakeFilterMetricTimeout()); err == nil {
+					feature = append(feature, milter.Feature{
+						Name:      metric.Name,
+						Value:     strconv.FormatInt(cnt, 10),
+						ValueType: milter.DataTypeInt,
+					})
+				}
+			}
+		}
 	}
 
-	// query ip region info
-	// only supper GeoLite2-City.mmdb from official https://download.maxmind.com/app/geoip_download_by_token
-	ctxRegion, cancelRegion := context.WithTimeout(context.Background(), timeout)
-	defer cancelRegion()
-	if !isPrivate && featureSwitch([]string{"feature", "ip", "region"}) {
-		matched := false
-		// query redis first
-		ctxRedisQuery, cancelRedisQuery := context.WithTimeout(context.Background(), timeout)
-		defer cancelRedisQuery()
-		if tmp, err := queryCacheInString(ctxRedisQuery, fmt.Sprintf("ip:country:%s", addr.String())); err == nil {
-			matched = true
-			if tmp != "" {
-				feature = append(feature, milter.Feature{Name: "ip_country", Value: strings.ToLower(tmp), ValueType: milter.DataTypeString})
-			}
-		}
-		if tmp, err := queryCacheInString(ctxRedisQuery, fmt.Sprintf("ip:province:%s", addr.String())); err == nil {
-			matched = true
-			if tmp != "" {
-				feature = append(feature, milter.Feature{Name: "ip_province", Value: strings.ToLower(tmp), ValueType: milter.DataTypeString})
-			}
-		}
-		if tmp, err := queryCacheInString(ctxRedisQuery, fmt.Sprintf("ip:city:%s", addr.String())); err == nil {
-			matched = true
-			if tmp != "" {
-				feature = append(feature, milter.Feature{Name: "ip_city", Value: strings.ToLower(tmp), ValueType: milter.DataTypeString})
-			}
-		}
+	return milter.RespContinue, feature, nil
+}
 
-		if !isPrivate && !matched && geoip != nil {
-			go func(ctx context.Context) {
-				country, province, city, err := QueryRegion(addr)
-				if err == nil {
-					if country != "" {
-						feature = append(feature, milter.Feature{Name: "ip_country", Value: strings.ToLower(country), ValueType: milter.DataTypeString})
-						if err := setCacheInString(ctx, fmt.Sprintf("ip:country:%s", addr.String()), strings.ToLower(country), time.Hour*24); err != nil {
-							log.Println("[ERROR]", err)
+func (f *Filter) Helo(name string, payload map[string]string, m *milter.Modifier) (milter.Response, []milter.Feature, error) {
+	//add feature of helo argument
+	feature := make([]milter.Feature, 0)
+	return milter.RespContinue, feature, nil
+}
+
+func (f *Filter) MailFrom(sender string, payload map[string]string, m *milter.Modifier) (milter.Response, []milter.Feature, error) {
+	feature := make([]milter.Feature, 0)
+	if len(sender) > 0 {
+		// default feature engineer
+
+		if d := preprocessing.GetDomain(sender); d != "" {
+			//1. check sender domain exist
+			if exist, err := resolver.DomainExist(d); !exist || err != nil {
+				feature = append(feature, milter.Feature{
+					Name:      "sender_domain_exist",
+					Value:     "false",
+					ValueType: milter.DataTypeBool,
+				})
+			}
+
+			// 2. check spf
+		}
+		if metrics, err := model.GetFilterMetricByStage(model.FilterStageMailFrom); err == nil {
+			for _, metric := range metrics {
+				if max(metric.PrimaryField.Stage, metric.SecondaryField.Stage) != model.FilterStageMailFrom {
+					continue
+				}
+				if metric.Category != model.FilterCategoryAll {
+					continue
+				}
+				if metric.SecondaryFieldID == 0 {
+					// no secondary field, only support count operation
+					if metric.Operation == model.MetricOperationCount {
+						if len(sender) > 0 {
+							key := fmt.Sprintf("%s:%s", metric.MakeFilterMetricKey(), sender)
+							if cnt, err := increaseCount(context.Background(), key, metric.MakeFilterMetricTimeout()); err == nil {
+								feature = append(feature, milter.Feature{
+									Name:      metric.Name,
+									Value:     strconv.FormatInt(cnt, 10),
+									ValueType: milter.DataTypeInt,
+								})
+							}
 						}
 					}
-					if province != "" {
-						feature = append(feature, milter.Feature{Name: "ip_province", Value: strings.ToLower(province), ValueType: milter.DataTypeString})
-						if err := setCacheInString(ctx, fmt.Sprintf("ip:province:%s", addr.String()), strings.ToLower(province), time.Hour*24); err != nil {
-							log.Println("[ERROR]", err)
-						}
+				} else {
+					// has secondary field, support count and collect operation, but primary and secondary field must not be empty
+					pk, okp := payload[metric.PrimaryField.Name]
+					sk, oks := payload[metric.SecondaryField.Name]
+					if !(okp && oks && len(pk) > 0 && len(sk) > 0) {
+						continue
 					}
-					if city != "" {
-						feature = append(feature, milter.Feature{Name: "ip_city", Value: strings.ToLower(city), ValueType: milter.DataTypeString})
-						if err := setCacheInString(ctx, fmt.Sprintf("ip:city:%s", addr.String()), strings.ToLower(city), time.Hour*24); err != nil {
-							log.Println("[ERROR]", err)
+					if metric.Operation == model.MetricOperationCount {
+						key := fmt.Sprintf("%s:%s:%s", metric.MakeFilterMetricKey(), pk, sk)
+						if cnt, err := increaseCount(context.Background(), key, metric.MakeFilterMetricTimeout()); err == nil {
+							feature = append(feature, milter.Feature{
+								Name:      metric.Name,
+								Value:     strconv.FormatInt(cnt, 10),
+								ValueType: milter.DataTypeInt,
+							})
+						}
+					} else if metric.Operation == model.MetricOperationCollect {
+						key := fmt.Sprintf("%s:%s", metric.MakeFilterMetricKey(), pk)
+						if cnt, err := addSet(context.Background(), key, sk, metric.MakeFilterMetricTimeout()); err == nil {
+							feature = append(feature, milter.Feature{
+								Name:      metric.Name,
+								Value:     strconv.FormatInt(cnt, 10),
+								ValueType: milter.DataTypeInt,
+							})
 						}
 					}
 				}
-			}(ctxRegion)
+
+			}
 		}
 	}
-
-	ctxRedis, cancelRedis := context.WithTimeout(context.Background(), timeout)
-	defer cancelRedis()
-	if featureSwitch([]string{"feature", "ip", "10min"}) {
-		go func(ctx context.Context) {
-			if n, err := increaseCount(ctx, fmt.Sprintf("ip:%s:%s", addr.String(), formatTimeForTenMinutes(time.Now())), time.Minute*10); err == nil {
-				feature = append(feature, milter.Feature{Name: "ip_10min_request", Value: fmt.Sprintf("%d", n), ValueType: milter.DataTypeInt})
-			}
-		}(ctxRedis)
-	}
-
-	if featureSwitch([]string{"feature", "ip", "1day"}) {
-		go func(ctx context.Context) {
-			if n, err := increaseCount(ctx, fmt.Sprintf("ip:%s:%s", addr.String(), time.Now().Format("20060102")), time.Hour*24); err == nil {
-				feature = append(feature, milter.Feature{Name: "ip_1day_request", Value: fmt.Sprintf("%d", n), ValueType: milter.DataTypeInt})
-			}
-		}(ctxRedis)
-	}
-
-	select {
-	case <-ctxPtr.Done():
-	case <-ctxRegion.Done():
-	case <-ctxRedis.Done():
-	}
 	return milter.RespContinue, feature, nil
 }
 
-func (f *Filter) Helo(name string, m *milter.Modifier) (milter.Response, []milter.Feature, error) {
-	//add feature of helo argument
+func (f *Filter) RcptTo(receipt string, payload map[string]string, m *milter.Modifier) (milter.Response, []milter.Feature, error) {
 	feature := make([]milter.Feature, 0)
-	feature = append(feature, milter.Feature{Name: "helo", Value: strings.ToLower(name), ValueType: milter.DataTypeString})
+	if len(receipt) > 0 {
+		if metrics, err := model.GetFilterMetricByStage(model.FilterStageRcptTo); err == nil {
+			for _, metric := range metrics {
+				if max(metric.PrimaryField.Stage, metric.SecondaryField.Stage) != model.FilterStageRcptTo {
+					continue
+				}
+				if metric.Category != model.FilterCategoryAll {
+					continue
+				}
+				if metric.SecondaryFieldID == 0 {
+					// no secondary field, only support count operation
+					if metric.Operation == model.MetricOperationCount {
+						if len(receipt) > 0 {
+							key := fmt.Sprintf("%s:%s", metric.MakeFilterMetricKey(), receipt)
+							if cnt, err := increaseCount(context.Background(), key, metric.MakeFilterMetricTimeout()); err == nil {
+								feature = append(feature, milter.Feature{
+									Name:      metric.Name,
+									Value:     strconv.FormatInt(cnt, 10),
+									ValueType: milter.DataTypeInt,
+								})
+							}
+						}
+					}
+				} else {
+					// has secondary field, support count and collect operation, but primary and secondary field must not be empty
+					pk, okp := payload[metric.PrimaryField.Name]
+					sk, oks := payload[metric.SecondaryField.Name]
+					if !(okp && oks && len(pk) > 0 && len(sk) > 0) {
+						continue
+					}
+					if metric.Operation == model.MetricOperationCount {
+						key := fmt.Sprintf("%s:%s:%s", metric.MakeFilterMetricKey(), pk, sk)
+						if cnt, err := increaseCount(context.Background(), key, metric.MakeFilterMetricTimeout()); err == nil {
+							feature = append(feature, milter.Feature{
+								Name:      metric.Name,
+								Value:     strconv.FormatInt(cnt, 10),
+								ValueType: milter.DataTypeInt,
+							})
+						}
+					} else if metric.Operation == model.MetricOperationCollect {
+						key := fmt.Sprintf("%s:%s", metric.MakeFilterMetricKey(), pk)
+						if cnt, err := addSet(context.Background(), key, sk, metric.MakeFilterMetricTimeout()); err == nil {
+							feature = append(feature, milter.Feature{
+								Name:      metric.Name,
+								Value:     strconv.FormatInt(cnt, 10),
+								ValueType: milter.DataTypeInt,
+							})
+						}
+					}
+				}
+			}
+		}
+	}
 	return milter.RespContinue, feature, nil
 }
 
-func (f *Filter) MailFrom(from string, m *milter.Modifier) (milter.Response, []milter.Feature, error) {
+func (f *Filter) Header(name string, value string, payload map[string]string, m *milter.Modifier) (milter.Response, []milter.Feature, error) {
 	return milter.RespContinue, nil, nil
 }
 
-func (f *Filter) RcptTo(rcptTo string, m *milter.Modifier) (milter.Response, []milter.Feature, error) {
+func (f *Filter) Headers(h textproto.MIMEHeader, payload map[string]string, m *milter.Modifier) (milter.Response, []milter.Feature, error) {
+	feature := make([]milter.Feature, 0)
+	if h != nil {
+		if metrics, err := model.GetFilterMetricByStage(model.FilterStageHeader); err == nil {
+			for _, metric := range metrics {
+				if max(metric.PrimaryField.Stage, metric.SecondaryField.Stage) != model.FilterStageHeader {
+					continue
+				}
+				if metric.Category != model.FilterCategoryAll {
+					continue
+				}
+				if metric.SecondaryFieldID == 0 {
+					// no secondary field, only support count operation
+					if metric.Operation == model.MetricOperationCount {
+						if v, ok := payload[metric.PrimaryField.Name]; ok && len(v) > 0 {
+							key := fmt.Sprintf("%s:%s", metric.MakeFilterMetricKey(), v)
+							if cnt, err := increaseCount(context.Background(), key, metric.MakeFilterMetricTimeout()); err == nil {
+								feature = append(feature, milter.Feature{
+									Name:      metric.Name,
+									Value:     strconv.FormatInt(cnt, 10),
+									ValueType: milter.DataTypeInt,
+								})
+							}
+						}
+					}
+				} else {
+					// has secondary field, support count and collect operation, but primary and secondary field must not be empty
+					pk, okp := payload[metric.PrimaryField.Name]
+					sk, oks := payload[metric.SecondaryField.Name]
+					if !(okp && oks && len(pk) > 0 && len(sk) > 0) {
+						continue
+					}
+					if metric.Operation == model.MetricOperationCount {
+						key := fmt.Sprintf("%s:%s:%s", metric.MakeFilterMetricKey(), pk, sk)
+						if cnt, err := increaseCount(context.Background(), key, metric.MakeFilterMetricTimeout()); err == nil {
+							feature = append(feature, milter.Feature{
+								Name:      metric.Name,
+								Value:     strconv.FormatInt(cnt, 10),
+								ValueType: milter.DataTypeInt,
+							})
+						}
+					} else if metric.Operation == model.MetricOperationCollect {
+						key := fmt.Sprintf("%s:%s", metric.MakeFilterMetricKey(), pk)
+						if cnt, err := addSet(context.Background(), key, sk, metric.MakeFilterMetricTimeout()); err == nil {
+							feature = append(feature, milter.Feature{
+								Name:      metric.Name,
+								Value:     strconv.FormatInt(cnt, 10),
+								ValueType: milter.DataTypeInt,
+							})
+						}
+					}
+				}
+			}
+		}
+	}
+	return milter.RespContinue, feature, nil
+}
+
+func (f *Filter) BodyChunk(chunk []byte, payload map[string]string, m *milter.Modifier) (milter.Response, []milter.Feature, error) {
 	return milter.RespContinue, nil, nil
 }
 
-func (f *Filter) Header(name string, value string, m *milter.Modifier) (milter.Response, []milter.Feature, error) {
-	return milter.RespContinue, nil, nil
-}
-
-func (f *Filter) Headers(h textproto.MIMEHeader, m *milter.Modifier) (milter.Response, []milter.Feature, error) {
-	return milter.RespContinue, nil, nil
-}
-
-func (f *Filter) BodyChunk(chunk []byte, m *milter.Modifier) (milter.Response, []milter.Feature, error) {
-	return milter.RespContinue, nil, nil
-}
-
-func (f *Filter) Body(m *milter.Modifier, macro map[string]string) (milter.Response, []milter.Feature, error) {
+func (f *Filter) Body(payload map[string]string, m *milter.Modifier, macro map[string]string) (milter.Response, []milter.Feature, error) {
 	if v, ok := macro["i"]; ok {
 		m.AddHeader("X-Queue-ID", v)
 	}
 	return milter.RespContinue, nil, nil
 }
+func (f *Filter) Abort(m *milter.Modifier) error {
+	return nil
+}
 
 type Server struct {
-	name    string
-	stopCh  chan struct{}
-	started bool
-	lock    *sync.Mutex
-	family  string
-	listen  string
-	debug   bool
-	_log    *easylog.Logger
+	name      string
+	stopCh    chan struct{}
+	started   bool
+	lock      *sync.Mutex
+	family    string
+	listen    string
+	debug     bool
+	_log      *easylog.Logger
+	html2text *preprocessing.Html2Text
 
 	filter *Filter
 }
 
-func New(family string, listen string) (server *Server) {
+func New(family string, listen string, _log *easylog.Logger) (server *Server) {
 	server = &Server{
 		name:    "filter",
 		stopCh:  make(chan struct{}),
@@ -183,6 +286,8 @@ func New(family string, listen string) (server *Server) {
 			optProtocol: milter.OptProtocol(milter.OptChangeBody | milter.OptChangeFrom | milter.OptChangeHeader | milter.OptAddHeader | milter.OptAddRcpt | milter.OptChangeFrom),
 			optAction:   0,
 		},
+		_log:      _log,
+		html2text: preprocessing.NewHtml2Text(nil),
 	}
 	return server
 }
@@ -245,7 +350,7 @@ func (s *Server) run() (err error) {
 		if err != nil {
 			return err
 		}
-		session := NewSession(client, s.filter, s._log)
+		session := NewSession(client, s.filter, s._log, s.html2text)
 		go session.Handle()
 	}
 }

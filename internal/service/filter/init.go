@@ -2,7 +2,7 @@ package filter
 
 import (
 	"easymail/internal/database"
-	"easymail/internal/dns"
+	"easymail/internal/easydns"
 	"easymail/internal/model"
 	"github.com/hyperjumptech/grule-rule-engine/ast"
 	"github.com/hyperjumptech/grule-rule-engine/builder"
@@ -16,7 +16,7 @@ import (
 )
 
 var rdb *redis.Client
-var resolver *dns.Resolver
+var resolver *easydns.Resolver
 var geoip *mmdbreader.Reader
 var knowledgeLibrary *ast.KnowledgeLibrary
 var ruleBuilder *builder.RuleBuilder
@@ -62,7 +62,7 @@ func reloadRules() {
 func init() {
 	rdb = database.GetRedisClient()
 	nameserver := "8.8.8.8"
-	c, err := model.GetConfigure("network", "dns", "nameserver")
+	c, err := model.GetConfigureByNames("network", "dns", "nameserver")
 	if err != nil {
 		log.Println("get configure error:", err)
 	} else {
@@ -70,11 +70,11 @@ func init() {
 			nameserver = c.Value
 		}
 	}
-	resolver = dns.NewResolver(nameserver)
+	resolver = easydns.New(nameserver)
 
 	// init maxmind db
 	if featureSwitch([]string{"feature", "ip", "region"}) {
-		if c, err := model.GetConfigure("feature", "ip", "region-city-mmdb"); err == nil {
+		if c, err := model.GetConfigureByNames("feature", "ip", "region-city-mmdb"); err == nil {
 			if c.DataType == model.DataTypeString {
 				geoip, err = mmdbreader.Open(c.Value)
 				if err != nil {

@@ -56,14 +56,14 @@ func FindValidateDomainByName(name string) (domain *Domain, err error) {
 	return domain, nil
 }
 
-func CreateDomain(name, describe string) (err error) {
-	if d, _ := FindDomainByName(name); d != nil {
+func CreateDomain(req CreateDomainRequest) (err error) {
+	if d, _ := FindDomainByName(req.Name); d != nil {
 		return errors.New("domain already exists")
 	}
 
 	domain := &Domain{
-		Name:        name,
-		Description: describe,
+		Name:        req.Name,
+		Description: req.Description,
 		Active:      true,
 		CreateTime:  time.Now(),
 		UpdateTime:  time.Now(),
@@ -79,7 +79,7 @@ func ValidateDomain(domain Domain) bool {
 	return domain.Active && !domain.Deleted
 }
 
-func DomainIndex(keyword, orderFiled, orderDir string, page, pageSize int) (int64, []Domain, error) {
+func IndexDomain(keyword, orderField, orderDir string, page, pageSize int) (int64, []Domain, error) {
 	domains := make([]Domain, 0)
 	query := db.Model(&domains)
 	if keyword != "" {
@@ -89,8 +89,8 @@ func DomainIndex(keyword, orderFiled, orderDir string, page, pageSize int) (int6
 	var total int64
 	query.Count(&total)
 
-	if orderFiled != "" && orderDir != "" {
-		query = query.Order(fmt.Sprintf("%s %s", orderFiled, orderDir))
+	if orderField != "" && orderDir != "" {
+		query = query.Order(fmt.Sprintf("%s %s", orderField, orderDir))
 	}
 	query = query.Offset(page).Limit(pageSize)
 	err := query.Find(&domains).Error

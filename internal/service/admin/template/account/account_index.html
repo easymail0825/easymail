@@ -137,7 +137,7 @@
                     </button>
                 </div>
                 <div class="modal-body">
-                    <input type="hidden" id="accID" name="accID">
+                    <input type="hidden" id="accountID" name="accountID">
                     <div class="row">
                         <div class="col-6">
                             <div class="form-group mb-2">
@@ -325,10 +325,14 @@
                 },
             },
             submitHandler: function (form) {
+                let data = $(form).parseForm()
+                data.accountID = Number(data.accountID)
+                data.domainID = Number(data.domainID)
+                data.storageQuota = Number(data.storageQuota)
                 $.ajax({
                     type: "POST",
                     url: "/account/create",
-                    data: JSON.stringify($(form).parseForm()),
+                    data: JSON.stringify(data),
                     contentType: 'application/json',
                     success: function (data) {
                         if (data.success) {
@@ -372,7 +376,7 @@
         $("#accountTable").on("click", ".btn-edit", function () {
             var id = $(this).data("id")
             $("#editAccountName").text($(this).data("username") + "@{{.domainName}}")
-            $("#accID").val(id)
+            $("#accountID").val(id)
             $("#editStorageQuota").val($(this).data("quota"))
             $("#editPasswordExpired").val(moment($(this).data("expired")).format("YYYY-MM-DD"))
             $("#editAccountModal").modal("show")
@@ -380,7 +384,7 @@
 
         // delete account
         $("#accountTable").on("click", ".btn-delete", function () {
-            var id = $(this).data("id")
+            let id = $(this).data("id")
             $.confirm({
                 title: 'Are you sure you want to delete it?',
                 content: 'When delete the account, all mails belongs to it will be deleted！',

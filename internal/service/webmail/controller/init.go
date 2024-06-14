@@ -10,11 +10,11 @@ import (
 var localStorage *storage.LocalStorage
 
 func init() {
-	c, err := model.GetConfigure("easymail", "storage", "data")
+	c, err := model.GetConfigureByNames("easymail", "storage", "data")
 	if err != nil {
 		log.Fatal("mail storage data is not defined")
 	}
-	r, err := model.GetConfigure("easymail", "configure", "root")
+	r, err := model.GetConfigureByNames("easymail", "configure", "root")
 	if err != nil {
 		log.Fatal("easymail configure root is not defined")
 	}

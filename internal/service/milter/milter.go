@@ -79,35 +79,35 @@ const (
 type Milter interface {
 	// Connect is called to provide SMTP connection data for incoming message.
 	// Suppress with OptNoConnect.
-	Connect(host string, family string, port uint16, addr net.IP, m *Modifier) (Response, []Feature, error)
+	Connect(host string, addr net.IP, payload map[string]string, m *Modifier) (Response, []Feature, error)
 
 	// Helo is called to process any HELO/EHLO related filters. Suppress with
 	// OptNoHelo.
-	Helo(name string, m *Modifier) (Response, []Feature, error)
+	Helo(name string, payload map[string]string, m *Modifier) (Response, []Feature, error)
 
 	// MailFrom is called to process filters on envelope FROM address. Suppress
 	// with OptNoMailFrom.
-	MailFrom(from string, m *Modifier) (Response, []Feature, error)
+	MailFrom(from string, payload map[string]string, m *Modifier) (Response, []Feature, error)
 
 	// RcptTo is called to process filters on envelope TO address. Suppress with
 	// OptNoRcptTo.
-	RcptTo(rcptTo string, m *Modifier) (Response, []Feature, error)
+	RcptTo(rcptTo string, payload map[string]string, m *Modifier) (Response, []Feature, error)
 
 	// Header is called once for each header in incoming message. Suppress with
 	// OptNoHeaders.
-	Header(name string, value string, m *Modifier) (Response, []Feature, error)
+	Header(name string, value string, payload map[string]string, m *Modifier) (Response, []Feature, error)
 
 	// Headers are called when all message headers have been processed. Suppress
 	// with OptNoEOH.
-	Headers(h textproto.MIMEHeader, m *Modifier) (Response, []Feature, error)
+	Headers(h textproto.MIMEHeader, payload map[string]string, m *Modifier) (Response, []Feature, error)
 
 	// BodyChunk is called to process next message body chunk data (up to 64KB
 	// in size). Suppress with OptNoBody.
-	BodyChunk(chunk []byte, m *Modifier) (Response, []Feature, error)
+	BodyChunk(chunk []byte, payload map[string]string, m *Modifier) (Response, []Feature, error)
 
 	// Body is called at the end of each message. All changes to message's
 	// content & attributes must be done here.
-	Body(m *Modifier, macro map[string]string) (Response, []Feature, error)
+	Body(payload map[string]string, m *Modifier, macro map[string]string) (Response, []Feature, error)
 
 	// Abort is called is the current message has been aborted. All message data
 	// should be reset to prior to the Helo callback. Connection data should be

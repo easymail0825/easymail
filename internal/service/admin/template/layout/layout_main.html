@@ -6,7 +6,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta name="description"
-          content="Easymail is complete email system base on postfix, include account, antispam, antivirus, forward, and more.">
+          content="Easymail is complete email system base on postfix, include account, filter, antivirus, forward, and more.">
     <meta name="author" content="Easymail">
     <title>{{.title}}</title>
 
@@ -99,20 +99,20 @@
             </div>
         </li>
 
-        <li class='nav-item {{if eq .module "antispam" }}active{{end}}'>
-            <a class='nav-link {{if eq .module "antispam" }}collapsed{{end}}' href="#" data-bs-toggle="collapse"
-               data-bs-target="#colAntispam"
-               aria-expanded="true" aria-controls="colAntispam">
+        <li class='nav-item {{if eq .module "filter" }}active{{end}}'>
+            <a class='nav-link {{if eq .module "filter" }}collapsed{{end}}' href="#" data-bs-toggle="collapse"
+               data-bs-target="#colFilter"
+               aria-expanded="true" aria-controls="colFilter">
                 <i class="fas fa-fw fa-bug"></i>
-                <span>Antispam</span>
+                <span>filter</span>
             </a>
-            <div id="colAntispam" class='collapse {{if eq .module "antispam" }}show{{end}}' aria-labelledby="headingTwo"
+            <div id="colFilter" class='collapse {{if eq .module "filter" }}show{{end}}' aria-labelledby="headingTwo"
                  data-parent="#accordionSidebar">
                 <div class="bg-white py-2 collapse-inner rounded">
-                    <a class='collapse-item {{if eq $.page "feature"}}active{{end}}' href="/antispam/feature">feature</a>
-                    <a class='collapse-item {{if eq $.page "rule"}}active{{end}}' href="/antispam/rule">rule</a>
-                    <a class='collapse-item {{if eq $.page "log"}}active{{end}}' href="/antispam/log">log</a>
-                    <a class='collapse-item {{if eq $.page "stat"}}active{{end}}' href="/antispam/stat">stat</a>
+                    <a class='collapse-item {{if eq $.page "feature"}}active{{end}}' href="/filter/feature">feature</a>
+                    <a class='collapse-item {{if eq $.page "rule"}}active{{end}}' href="/filter/rule">rule</a>
+                    <a class='collapse-item {{if eq $.page "log"}}active{{end}}' href="/filter/log">log</a>
+                    <a class='collapse-item {{if eq $.page "stat"}}active{{end}}' href="/filter/stat">stat</a>
                 </div>
             </div>
         </li>

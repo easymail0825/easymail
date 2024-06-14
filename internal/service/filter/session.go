@@ -5,15 +5,21 @@ import (
 	"bytes"
 	"easymail/internal/easylog"
 	"easymail/internal/model"
+	"easymail/internal/preprocessing"
 	"easymail/internal/service/milter"
+	"easymail/vender/spf"
+	"easymail/vender/ssdeep"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/hyperjumptech/grule-rule-engine/ast"
+	"github.com/jhillyerd/enmime"
 	"io"
 	"log"
 	"net"
+	"net/mail"
 	"net/textproto"
 	"strconv"
 	"strings"
@@ -23,33 +29,46 @@ import (
 var errCloseSession = errors.New("stop current milter processing")
 var serverProtocolVersion uint32 = 2
 
-type AntispamResult struct {
-	Action model.AntispamAction `json:"action"`
-	RuleID int                  `json:"ruleID"`
+const minHashTextSize = 128
+const sep = "\r\n"
+
+type Result struct {
+	Action model.FilterAction `json:"action"`
+	RuleID int                `json:"ruleID"`
 }
 
 // Session keeps Session state during MTA communication
 type Session struct {
-	actions  milter.OptAction
-	protocol milter.OptProtocol
-	conn     net.Conn
-	headers  textproto.MIMEHeader
-	macros   map[string]string
-	filter   *Filter
-	features []milter.Feature
-	_log     *easylog.Logger
+	id         uuid.UUID
+	actions    milter.OptAction
+	protocol   milter.OptProtocol
+	conn       net.Conn
+	headers    textproto.MIMEHeader
+	macros     map[string]string
+	filter     *Filter
+	features   []milter.Feature
+	payload    map[string]string
+	headerData []byte // mail headerData
+	bodyData   []byte // mail bodyData
+	_log       *easylog.Logger
+	html2Text  *preprocessing.Html2Text
 }
 
-func NewSession(conn net.Conn, filter *Filter, _log *easylog.Logger) *Session {
+func NewSession(conn net.Conn, filter *Filter, _log *easylog.Logger, html2Text *preprocessing.Html2Text) *Session {
 	return &Session{
-		actions:  0,
-		protocol: 0,
-		conn:     conn,
-		filter:   filter,
-		macros:   make(map[string]string),
-		headers:  make(textproto.MIMEHeader),
-		features: make([]milter.Feature, 0),
-		_log:     _log,
+		id:         uuid.New(),
+		actions:    0,
+		protocol:   0,
+		conn:       conn,
+		filter:     filter,
+		macros:     make(map[string]string),
+		headers:    make(textproto.MIMEHeader),
+		features:   make([]milter.Feature, 0),
+		payload:    make(map[string]string),
+		headerData: make([]byte, 0),
+		bodyData:   make([]byte, 0),
+		_log:       _log,
+		html2Text:  html2Text,
 	}
 }
 
@@ -133,20 +152,43 @@ func (s *Session) newModifier() *milter.Modifier {
 // Process processes incoming milter commands
 func (s *Session) Process(msg *milter.Message) (milter.Response, []milter.Feature, error) {
 	switch milter.Code(msg.Code) {
-	case milter.CodeAbort:
-		fmt.Println("abort")
-		s.headers = nil
-		s.macros = nil
-		s.features = nil
-		return nil, nil, nil
 
-	case milter.CodeBody:
-		fmt.Println("body")
-		return s.filter.BodyChunk(msg.Data, s.newModifier())
+	case milter.CodeOptNeg:
+		fmt.Println("optneg")
+		// ignore request and prepare response buffer
+		var buffer bytes.Buffer
+		// prepare response bodyData
+		for _, value := range []uint32{serverProtocolVersion, uint32(s.actions), uint32(s.protocol)} {
+			if err := binary.Write(&buffer, binary.BigEndian, value); err != nil {
+				return nil, nil, err
+			}
+		}
+		// build and send packet
+		return milter.NewResponse('O', buffer.Bytes()), nil, nil
+
+	case milter.CodeMacro:
+		fmt.Println("macro")
+		// define macros
+		s.macros = make(map[string]string)
+		// convert bodyData to Go strings
+		data := milter.DecodeCStrings(msg.Data[1:])
+		if len(data) != 0 {
+			if len(data)%2 == 1 {
+				data = append(data, "")
+			}
+
+			// store bodyData in a map
+			for i := 0; i < len(data); i += 2 {
+				s.macros[data[i]] = data[i+1]
+			}
+		}
+		// do not send response
+		return nil, nil, nil
 
 	case milter.CodeConn:
 		// new connection, get hostname
 		fmt.Println("conn")
+
 		hostname := milter.ReadCString(msg.Data)
 		msg.Data = msg.Data[len(hostname)+1:]
 		// get protocol family
@@ -170,100 +212,274 @@ func (s *Session) Process(msg *milter.Message) (milter.Response, []milter.Featur
 			'4': "tcp4",
 			'6': "tcp6",
 		}
+		//address := fmt.Sprintf("%s:%d", family[protocolFamily], port)
+		s.payload["Family"] = family[protocolFamily]
+		s.payload["Port"] = fmt.Sprintf("%d", port)
+		ip := net.ParseIP(address)
+
+		// generate payload of the session
+		if fields, err := model.GetFilterFieldByStage(model.FilterStageConnect); err == nil {
+			for _, f := range fields {
+				switch f.Name {
+				case "ClientIP":
+					s.payload["ClientIP"] = address
+					break
+				case "PTR":
+					ptr, err := resolver.LookupPtr(address)
+					if err == nil {
+						s.payload["PTR"] = strings.Join(ptr, sep)
+					}
+				case "Region":
+					country, province, city, err := QueryRegion(ip)
+					if err == nil {
+						s.payload["Country"] = country
+						s.payload["Province"] = province
+						s.payload["City"] = city
+					}
+				}
+			}
+		}
+
 		// run handler and return
 		return s.filter.Connect(
 			hostname,
-			family[protocolFamily],
-			port,
-			net.ParseIP(address),
+			ip,
+			s.payload,
 			s.newModifier())
 
-	case milter.CodeMacro:
-		// define macros
-		fmt.Println("macro")
-		s.macros = make(map[string]string)
-		// convert data to Go strings
-		data := milter.DecodeCStrings(msg.Data[1:])
-		if len(data) != 0 {
-			if len(data)%2 == 1 {
-				data = append(data, "")
-			}
-
-			// store data in a map
-			for i := 0; i < len(data); i += 2 {
-				s.macros[data[i]] = data[i+1]
+	case milter.CodeHelo:
+		fmt.Println("helo")
+		// helo command
+		name := strings.TrimSuffix(string(msg.Data), milter.Null)
+		// generate payload of the session
+		if fields, err := model.GetFilterFieldByStage(model.FilterStageHelo); err == nil {
+			for _, f := range fields {
+				switch f.Name {
+				case "Helo":
+					s.payload["Helo"] = name
+				}
 			}
 		}
-		// do not send response
-		return nil, nil, nil
-
-	case milter.CodeEOB:
-		// call and return milter handler
-		fmt.Println("eob")
-		return s.filter.Body(s.newModifier(), s.macros)
-
-	case milter.CodeHelo:
-		// helo command
-		fmt.Println("helo")
-		name := strings.TrimSuffix(string(msg.Data), milter.Null)
-		return s.filter.Helo(name, s.newModifier())
+		return s.filter.Helo(name, s.payload, s.newModifier())
 
 	case milter.CodeHeader:
-		// make sure headers is initialized
 		fmt.Println("header")
+		// make sure headers is initialized
 		if s.headers == nil {
 			s.headers = make(textproto.MIMEHeader)
 		}
 		// add new header to headers map
-		headerData := milter.DecodeCStrings(msg.Data)
+		data := milter.DecodeCStrings(msg.Data)
 		// headers with an empty body appear as `text\x00\x00`, decodeCStrings will drop the empty body
-		if len(headerData) == 1 {
-			headerData = append(headerData, "")
-		}
-		if len(headerData) == 2 {
-			s.headers.Add(headerData[0], headerData[1])
-			// call and return milter handler
-			return s.filter.Header(headerData[0], headerData[1], s.newModifier())
+		if len(data) == 1 {
+			data = append(data, "")
 		}
 
-	case milter.CodeMail:
-		// envelope from address
-		fmt.Println("mail")
-		from := milter.ReadCString(msg.Data)
-		return s.filter.MailFrom(strings.Trim(from, "<>"), s.newModifier())
+		if len(data) == 2 {
+			s.headerData = append(s.headerData, []byte(fmt.Sprintf("%s: %s\r\n", data[0], data[1]))...)
+			s.headers.Add(data[0], data[1])
+			// call and return milter handler
+			return s.filter.Header(data[0], data[1], s.payload, s.newModifier())
+		}
 
 	case milter.CodeEOH:
-		// end of headers
 		fmt.Println("eoh")
-		return s.filter.Headers(s.headers, s.newModifier())
+		// end of headers
+		sb := strings.Builder{}
+		for key, value := range s.headers {
+			sb.WriteString(fmt.Sprintf("%s: %s\r\n", key, value))
+		}
+		email, emailErr := enmime.ReadEnvelope(strings.NewReader(sb.String()))
 
-	case milter.CodeOptNeg:
-		// ignore request and prepare response buffer
-		fmt.Println("optneg")
-		var buffer bytes.Buffer
-		// prepare response data
-		for _, value := range []uint32{serverProtocolVersion, uint32(s.actions), uint32(s.protocol)} {
-			if err := binary.Write(&buffer, binary.BigEndian, value); err != nil {
-				return nil, nil, err
+		// generate payload of the session
+		if fields, err := model.GetFilterFieldByStage(model.FilterStageHeader); err == nil {
+			for _, f := range fields {
+				switch f.Name {
+				case "HeaderFrom":
+					if emailErr == nil {
+						if sender, err := mail.ParseAddress(email.GetHeader("From")); err == nil {
+							s.payload["HeaderFrom"] = sender.Address
+							s.payload["Nick"] = sender.Name
+						}
+					}
+				case "Mailer":
+					if emailErr == nil {
+						s.payload["Mailer"] = email.GetHeader("X-Mailer")
+					}
+				case "Subject":
+					if emailErr == nil {
+						s.payload["Subject"] = email.GetHeader("Subject")
+					}
+				case "Dmarc":
+					// todo
+				case "DomainKey":
+					//todo
+				}
 			}
 		}
-		// build and send packet
-		return milter.NewResponse('O', buffer.Bytes()), nil, nil
+		return s.filter.Headers(s.headers, s.payload, s.newModifier())
 
-	case milter.CodeQuit:
-		// client requested session close
-		fmt.Println("quit")
-		return nil, nil, errCloseSession
+	case milter.CodeMail:
+		fmt.Println("mail")
+		// envelope from address
+		sender := milter.ReadCString(msg.Data)
+		cleanSender := strings.Trim(sender, "<>")
+		// generate payload of the session
+		if fields, err := model.GetFilterFieldByStage(model.FilterStageMailFrom); err == nil {
+			for _, f := range fields {
+				switch f.Name {
+				case "Sender":
+					s.payload["Sender"] = cleanSender
+				case "SPF":
+					result, _ := spf.CheckHostWithSender(resolver, net.ParseIP(s.payload["ClientIP"]), s.payload["Helo"], sender)
+					s.payload["SPF"] = string(result)
+				}
+			}
+		}
+
+		return s.filter.MailFrom(cleanSender, s.payload, s.newModifier())
 
 	case milter.CodeRcpt:
-		// envelope to address
 		fmt.Println("rcpt")
+		// envelope to address
 		to := milter.ReadCString(msg.Data)
-		return s.filter.RcptTo(strings.Trim(to, "<>"), s.newModifier())
+		cleanTo := strings.Trim(to, "<>")
+		if fields, err := model.GetFilterFieldByStage(model.FilterStageRcptTo); err == nil {
+			for _, f := range fields {
+				switch strings.ToLower(f.Name) {
+				case "rcpt":
+					if len(s.payload["rcpt"]) == 0 {
+						s.payload["Rcpt"] = cleanTo
+					} else {
+						s.payload["Rcpt"] = s.payload["Rcpt"] + "," + cleanTo
+					}
+				}
+			}
+		}
+		return s.filter.RcptTo(cleanTo, s.payload, s.newModifier())
+
+	case milter.CodeBody:
+		fmt.Println("body")
+		// append to mail bodyData array only
+		s.bodyData = append(s.bodyData, msg.Data...)
+		//return s.filter.BodyChunk(msg.Data, s.payload, s.newModifier())
+		return milter.RespContinue, nil, nil
+
+	case milter.CodeEOB:
+		fmt.Println("eob")
+		// parse the mail data
+		buf := bytes.Buffer{}
+		if len(s.headerData) == 0 {
+			buf.Write([]byte("test: test"))
+		} else {
+			buf.Write(s.headerData)
+		}
+		buf.Write([]byte("\r\n"))
+		buf.Write(s.bodyData)
+		mailData := buf.Bytes()
+		s.payload["Size"] = strconv.Itoa(len(mailData))
+		mailObj, err := enmime.ReadEnvelope(bytes.NewReader(buf.Bytes()))
+
+		if err != nil {
+			return milter.RespContinue, nil, nil
+		}
+		text := mailObj.Text
+		html := mailObj.HTML
+		textParts, urls := s.html2Text.Parse(html)
+		htmlText := strings.Join(textParts, "\n")
+		if len(htmlText) > 0 {
+			text = htmlText
+		}
+		s.payload["Text"] = text
+		s.payload["Html"] = html
+		s.payload["URL"] = strings.Join(urls, sep)
+
+		// compute ssdeep hash
+		hashText := ""
+		if len(text) >= minHashTextSize {
+			hashText = text
+		} else if len(html) > minHashTextSize {
+			hashText = html
+		}
+		if len(hashText) >= minHashTextSize {
+			if h, err := ssdeep.FuzzyBytes([]byte(hashText)); err == nil {
+				s.payload["TextHash"] = h
+				if d := strings.SplitN(h, ":", 3); len(d) == 3 {
+					if chunkSize, err := strconv.Atoi(d[0]); err == nil {
+						if _, err1 := model.CreateSsdeepHash(h, s.id.String(), chunkSize, false); err1 != nil {
+							s._log.Error("CreateSsdeepHash", err1)
+						}
+					}
+				}
+			} else {
+				s.payload["TextHash"] = ""
+			}
+		}
+
+		// Attachment List
+		attachNames := make([]string, 0)
+		attachHashes := make([]string, 0)
+		attachMd5 := make([]string, 0)
+		for _, att := range mailObj.Attachments {
+			attachNames = append(attachNames, att.FileName)
+			if h, err := computeAttachHash(att.Content); err == nil {
+				attachHashes = append(attachHashes, h)
+			}
+			if m, err := computeAttachMD5(att.Content); err == nil {
+				attachMd5 = append(attachMd5, m)
+			}
+		}
+
+		// Inline List
+		for _, att := range mailObj.Inlines {
+			attachNames = append(attachNames, att.FileName)
+			if h, err := computeAttachHash(att.Content); err == nil {
+				attachHashes = append(attachHashes, h)
+			}
+			if m, err := computeAttachMD5(att.Content); err == nil {
+				attachMd5 = append(attachMd5, m)
+			}
+		}
+
+		// save attachment hashes
+		for _, h := range attachHashes {
+			if d := strings.SplitN(h, ":", 3); len(d) == 3 {
+				if chunkSize, err := strconv.Atoi(d[0]); err == nil {
+					if _, err1 := model.CreateSsdeepHash(h, s.id.String(), chunkSize, true); err1 != nil {
+						s._log.Error("CreateSsdeepHash", err1)
+					}
+				}
+			}
+		}
+		s.payload["AttachName"] = strings.Join(attachNames, sep)
+		s.payload["AttachHash"] = strings.Join(attachHashes, sep)
+		s.payload["AttachMd5"] = strings.Join(attachMd5, sep)
+
+		// Other Part List
+		for _, att := range mailObj.OtherParts {
+			attachNames = append(attachNames, att.FileName)
+		}
+
+		fmt.Println("payload:", s.payload)
+
+		// call and return milter handler
+		return s.filter.Body(s.payload, s.newModifier(), s.macros)
 
 	case milter.CodeData:
-		// data, ignore
-		fmt.Println("data")
+		// bodyData, ignore
+		return nil, nil, nil
+
+	case milter.CodeQuit:
+		fmt.Println("quit")
+		// client requested session close
+		return nil, nil, errCloseSession
+
+	case milter.CodeAbort:
+		s.headers = nil
+		s.macros = nil
+		s.features = nil
+		s.payload = nil
+		return nil, nil, nil
 
 	default:
 		// print error and close session
@@ -282,6 +498,15 @@ func (s *Session) Handle() {
 		if err != nil {
 			log.Printf("Error closing connection: %v\n", err)
 		}
+		s._log = nil
+		s.headers = nil
+		s.macros = nil
+		s.filter = nil
+		s.features = nil
+		s.payload = nil
+		s.bodyData = nil
+		s._log = nil
+		s.html2Text = nil
 	}(s.conn)
 
 	for {
@@ -306,41 +531,40 @@ func (s *Session) Handle() {
 			}
 		}
 
-		// check rules
-		fmt.Println("features is", s.features)
-		result := AntispamResult{}
-		if knowledgeInstance != nil {
-			featureJson, err := Feature2Json(s.features)
-			if err == nil {
-				fmt.Printf("featureJson is %s\n", featureJson)
-				dataContext := ast.NewDataContext()
-				if err := dataContext.AddJSON("feature", featureJson); err == nil {
-					if err := dataContext.Add("antispam", &result); err == nil {
-						fmt.Println("add ok")
-						// execute rules
-						err = ruleEngine.Execute(dataContext, knowledgeInstance)
-						if err != nil {
-							panic(err)
+		// check rules, ignore CodeOptNeg,CodeMacro,CodeHeader
+		if !(msg.Code == 'O' || msg.Code == 'D' || msg.Code == 'L') {
+			result := Result{}
+			if knowledgeInstance != nil {
+				featureJson, err := Feature2Json(s.features)
+				if err == nil {
+					dataContext := ast.NewDataContext()
+					if err := dataContext.AddJSON("feature", featureJson); err == nil {
+						if err := dataContext.Add("result", &result); err == nil {
+							// execute rules
+							err = ruleEngine.Execute(dataContext, knowledgeInstance)
+							if err != nil {
+								panic(err)
+							}
 						}
 					}
 				}
 			}
-		}
-		fmt.Printf("result is %v\n", result)
-		if result.RuleID > 0 {
-			switch result.Action {
-			case model.AntispamActionAccept:
-				resp = milter.RespAccept
-			case model.AntispamActionTrash:
-				resp = milter.RespAccept
-			case model.AntispamActionDefer:
-				resp = milter.RespTempFail
-			case model.AntispamActionReject:
-				resp = milter.RespReject
-			case model.AntispamActionDiscard:
-				resp = milter.RespDiscard
-			case model.AntispamActionQuarantine:
-				resp = milter.RespReject
+			fmt.Printf("result is %v\n", result)
+			if result.RuleID > 0 {
+				switch result.Action {
+				case model.FilterActionAccept:
+					resp = milter.RespAccept
+				case model.FilterActionTrash:
+					resp = milter.RespAccept
+				case model.FilterActionDefer:
+					resp = milter.RespTempFail
+				case model.FilterActionReject:
+					resp = milter.RespReject
+				case model.FilterActionDiscard:
+					resp = milter.RespDiscard
+				case model.FilterActionQuarantine:
+					resp = milter.RespReject
+				}
 			}
 		}
 

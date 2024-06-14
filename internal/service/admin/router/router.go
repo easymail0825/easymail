@@ -80,7 +80,7 @@ func New(_log *easylog.Logger, root, cookiePassword, cookieTag string) *gin.Engi
 		accountGroup.GET("/index", accountController.IndexAccount)
 		accountGroup.POST("/index", accountController.IndexAccount)
 		accountGroup.POST("/create", accountController.CreateAccount)
-		accountGroup.GET("/active", accountController.ToggleAccountActive)
+		accountGroup.GET("/active", accountController.ToggleAccount)
 		accountGroup.GET("/delete", accountController.DeleteAccount)
 		accountGroup.POST("/edit", accountController.EditAccount)
 	}
@@ -105,7 +105,23 @@ func New(_log *easylog.Logger, root, cookiePassword, cookieTag string) *gin.Engi
 	{
 		configureGroup.GET("/node/:id", configureController.Node)
 		configureGroup.POST("/node/:id", configureController.Node)
+		configureGroup.POST("/node/edit/:id", configureController.Edit)
 	}
+
+	filterController := controller.FilterController{}
+	filterGroup := r.Group("/filter")
+	{
+		filterGroup.GET("/feature", filterController.Feature)
+		filterGroup.POST("/feature", filterController.Feature)
+		filterGroup.POST("/feature/field", filterController.IndexField)
+		filterGroup.POST("/feature/metric", filterController.IndexMetric)
+		filterGroup.POST("/feature/metric/create", filterController.CreateMetric)
+		filterGroup.GET("/feature/metric/toggle", filterController.ToggleMetric)
+		filterGroup.GET("/feature/metric/edit", filterController.EditMetric)
+		filterGroup.POST("/feature/metric/edit", filterController.EditMetric)
+		filterGroup.POST("/feature/metric/delete", filterController.DeleteMetric)
+	}
+
 	return r
 }
 

@@ -56,7 +56,7 @@ func MakeServicePath(family, listen string) (url string, err error) {
 }
 
 func FlushPostfixConfig(data []PostfixConfigure) error {
-	postConf, err := model.GetConfigure("postfix", "execute", "postconf")
+	postConf, err := model.GetConfigureByNames("postfix", "execute", "postconf")
 	if err != nil {
 		return err
 	}

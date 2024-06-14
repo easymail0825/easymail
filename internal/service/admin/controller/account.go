@@ -1,14 +1,10 @@
 package controller
 
 import (
-	"context"
-	"easymail/internal/database"
 	"easymail/internal/model"
 	"easymail/internal/postfix/sync"
-	"fmt"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 	"log"
 	"net/http"
 	"strconv"
@@ -17,22 +13,6 @@ import (
 )
 
 type AccountController struct{}
-
-type DomainIndexRequest struct {
-	DataTableRequest
-	Keyword string `json:"keyword"`
-}
-
-type DomainIndexResponse struct {
-	ID           int64     `json:"id"`
-	Name         string    `json:"name"`
-	TotalAccount int       `json:"totalAccount"`
-	MX           string    `json:"mx"`
-	SPF          string    `json:"spf"`
-	DMARC        string    `json:"dmarc"`
-	Status       int       `json:"status"`
-	CreateTime   time.Time `json:"createTime"`
-}
 
 func (a *AccountController) IndexDomain(c *gin.Context) {
 	if c.Request.Method == "GET" {
@@ -48,7 +28,7 @@ func (a *AccountController) IndexDomain(c *gin.Context) {
 		})
 		return
 	} else if c.Request.Method == "POST" {
-		var req DomainIndexRequest
+		var req model.IndexDomainRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusOK, gin.H{"error": err.Error()})
 			return
@@ -63,13 +43,13 @@ func (a *AccountController) IndexDomain(c *gin.Context) {
 		}
 
 		// 执行数据库查询，获取数据列表
-		total, domains, err := model.DomainIndex(req.Keyword, orderField, orderDir, req.Start, req.Length)
+		total, domains, err := model.IndexDomain(req.Keyword, orderField, orderDir, req.Start, req.Length)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "search domain error"})
 			return
 		}
 
-		data := make([]DomainIndexResponse, 0)
+		data := make([]model.IndexDomainResponse, 0)
 
 		for _, domain := range domains {
 			status := 0
@@ -86,59 +66,19 @@ func (a *AccountController) IndexDomain(c *gin.Context) {
 			}
 
 			// dns resolve
-			rdb := database.GetRedisClient()
-			c := context.Background()
-			expireTime := time.Duration(30 * 24 * time.Hour)
 
 			// mx
-			mxKey := fmt.Sprintf("mx:%s", domain.Name)
-			mx, err := rdb.Get(c, mxKey).Result()
-			if err == redis.Nil {
-				s := make([]string, 0)
-				s, err = resolver.LookupMX(domain.Name)
-				if err != nil {
-					log.Println(err)
-				} else {
-					mx = strings.Join(s, "<br>\n")
-					rdb.Set(c, mxKey, mx, expireTime)
-				}
-			} else if err != nil {
-				log.Println(err)
-			}
+			mxes, err := resolver.LookupMX(domain.Name)
+			mx := strings.Join(mxes, "<br>\n")
 
 			// spf
-			spfKey := fmt.Sprintf("spf:%s", domain.Name)
-			spf, err := rdb.Get(c, spfKey).Result()
-			if err == redis.Nil {
-				s := make([]string, 0)
-				s, err = resolver.LookupSPF(domain.Name)
-				if err != nil {
-					log.Println(err)
-				} else {
-					spf = strings.Join(s, "<br>\n")
-					rdb.Set(c, spfKey, spf, expireTime)
-				}
-			} else if err != nil {
-				log.Println(err)
-			}
+			spf, _ := resolver.LookupSPF(domain.Name)
 
 			// dmarc
-			dmarcKey := fmt.Sprintf("dmarc:%s", domain.Name)
-			dmarc, err := rdb.Get(c, dmarcKey).Result()
-			if err == redis.Nil {
-				s := make([]string, 0)
-				s, err = resolver.LookupDMARC(domain.Name)
-				if err != nil {
-					log.Println(err)
-				} else {
-					dmarc = strings.Join(s, "<br>\n")
-					rdb.Set(c, dmarcKey, dmarc, expireTime)
-				}
-			} else if err != nil {
-				log.Println(err)
-			}
+			dmarcs, _ := resolver.LookupDMARC(domain.Name)
+			dmarc := strings.Join(dmarcs, "<br>\n")
 
-			data = append(data, DomainIndexResponse{
+			data = append(data, model.IndexDomainResponse{
 				ID:           domain.ID,
 				Name:         domain.Name,
 				TotalAccount: int(totalAccount),
@@ -211,21 +151,15 @@ func (a *AccountController) DeleteDomain(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": "delete domain success"})
 }
 
-type CreateDomainRequest struct {
-	//ID          int    `json:"id"`
-	Name        string `json:"domainName" binding:"required,min=3,max=255"`
-	Description string `json:"description" binding:"required,min=3,max=255"`
-}
-
 func (a *AccountController) CreateDomain(c *gin.Context) {
 	if c.Request.Method == "POST" {
-		var req CreateDomainRequest
+		var req model.CreateDomainRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusOK, gin.H{"error": err.Error()})
 			return
 		}
 
-		err := model.CreateDomain(req.Name, req.Description)
+		err := model.CreateDomain(req)
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{"error": "create domain failed:" + err.Error()})
 			return
@@ -238,25 +172,6 @@ func (a *AccountController) CreateDomain(c *gin.Context) {
 	} else {
 		c.JSON(http.StatusOK, gin.H{"error": "method not allowed"})
 	}
-}
-
-type AccountIndexRequest struct {
-	DataTableRequest
-	DomainID int    `json:"domainID"`
-	Keyword  string `json:"keyword"`
-	Status   int    `json:"status"`
-}
-
-type AccountIndexResponse struct {
-	ID           int64     `json:"id"`
-	Username     string    `json:"username"`
-	Status       int       `json:"status"`
-	CreateTime   time.Time `json:"createTime"`
-	StorageQuota int64     `json:"storageQuota"`
-	StorageUsage int64     `json:"storageUsage"`
-	MailQuantity int64     `json:"mailQuantity"`
-	MailUsage    int64     `json:"mailUsage"`
-	ExpiredTime  time.Time `json:"expiredTime"`
 }
 
 type domainPair struct {
@@ -297,7 +212,7 @@ func (a *AccountController) IndexAccount(c *gin.Context) {
 		})
 		return
 	} else if c.Request.Method == "POST" {
-		var req AccountIndexRequest
+		var req model.IndexAccountRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusOK, gin.H{"error": err.Error()})
 			return
@@ -313,11 +228,11 @@ func (a *AccountController) IndexAccount(c *gin.Context) {
 
 		total, accounts, err := model.Index(req.DomainID, req.Status, req.Keyword, orderField, orderDir, req.Start, req.Length)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "search model error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "search account error"})
 			return
 		}
 
-		data := make([]AccountIndexResponse, 0)
+		data := make([]model.IndexAccountResponse, 0)
 
 		for _, acc := range accounts {
 			status := 0
@@ -342,7 +257,7 @@ func (a *AccountController) IndexAccount(c *gin.Context) {
 				log.Println(err)
 			}
 
-			data = append(data, AccountIndexResponse{
+			data = append(data, model.IndexAccountResponse{
 				ID:           acc.ID,
 				Username:     acc.Username,
 				Status:       status,
@@ -363,33 +278,19 @@ func (a *AccountController) IndexAccount(c *gin.Context) {
 	}
 }
 
-type CreateAccountRequest struct {
-	Name            string `json:"accountName" binding:"required,min=3,max=64"`
-	DomainID        string `json:"domainID" binding:"required"`
-	Password        string `json:"password" binding:"required,min=3,max=64"`
-	PasswordAgain   string `json:"passwordRepeat" binding:"required,min=3,max=64"`
-	StorageQuota    string `json:"storageQuota" binding:"required,min=-1,max=100000"`
-	PasswordExpired string `json:"passwordExpired"`
-}
-
 func (a *AccountController) CreateAccount(c *gin.Context) {
 	if c.Request.Method == "POST" {
-		var req CreateAccountRequest
+		var err error
+		var req model.CreateAccountRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusOK, gin.H{"error": err.Error()})
-			return
-		}
-
-		did, err := strconv.ParseInt(req.DomainID, 10, 64)
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{"error": "invalid domain id"})
 			return
 		}
 
 		if req.PasswordExpired == "" {
 			req.PasswordExpired = "2099-12-31"
 		}
-		passwordExpiredTime, err := time.Parse("2006-01-02", req.PasswordExpired)
+		req.PasswordExpiredTime, err = time.Parse("2006-01-02", req.PasswordExpired)
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{"error": "invalid password expired time"})
 			return
@@ -399,118 +300,95 @@ func (a *AccountController) CreateAccount(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"error": "password and password repeat not match"})
 			return
 		}
-		var storageQuota int64
-		if req.StorageQuota == "" {
-			storageQuota = -1
-		} else {
-			storageQuota, err = strconv.ParseInt(req.StorageQuota, 10, 64)
-			if err != nil {
-				log.Println(err)
-			}
-		}
-		err = model.CreateAccount(did, req.Name, req.Password, storageQuota, passwordExpiredTime)
+
+		err = model.CreateAccount(req)
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{"error": "create model failed:" + err.Error()})
+			c.JSON(http.StatusOK, gin.H{"error": "create account failed:" + err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"success": "create model success"})
+		c.JSON(http.StatusOK, gin.H{"success": "create account success"})
 	} else {
 		c.JSON(http.StatusOK, gin.H{"error": "method not allowed"})
 	}
 }
 
-func (a *AccountController) ToggleAccountActive(c *gin.Context) {
+func (a *AccountController) ToggleAccount(c *gin.Context) {
 	id := c.Query("id")
 	if id == "" {
-		c.JSON(http.StatusOK, gin.H{"error": "invalid model id"})
+		c.JSON(http.StatusOK, gin.H{"error": "invalid account id"})
 		return
 	}
 
 	accID, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"error": "invalid model id"})
+		c.JSON(http.StatusOK, gin.H{"error": "invalid account id"})
 		return
 	}
 
-	err = model.ToggleAccountActive(accID)
+	err = model.ToggleAccount(accID)
 
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"error": "toggle model active error"})
+		c.JSON(http.StatusOK, gin.H{"error": "toggle account active error"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"success": "toggle model active success"})
+	c.JSON(http.StatusOK, gin.H{"success": "toggle account active success"})
 }
 
 func (a *AccountController) DeleteAccount(c *gin.Context) {
 	id := c.Query("id")
 	if id == "" {
-		c.JSON(http.StatusOK, gin.H{"error": "invalid model id"})
+		c.JSON(http.StatusOK, gin.H{"error": "invalid account id"})
 		return
 	}
 
 	accID, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"error": "invalid model id"})
+		c.JSON(http.StatusOK, gin.H{"error": "invalid account id"})
 		return
 	}
 
 	err = model.DeleteAccount(accID)
 
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"error": "delete model error"})
+		c.JSON(http.StatusOK, gin.H{"error": "delete account error"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"success": "delete model success"})
-}
-
-type EditAccountRequest struct {
-	ID              string `json:"accID" binding:"required"`
-	Password        string `json:"editPassword"`
-	StorageQuota    string `json:"editStorageQuota"`
-	PasswordExpired string `json:"editPasswordExpired"`
+	c.JSON(http.StatusOK, gin.H{"success": "delete account success"})
 }
 
 func (a *AccountController) EditAccount(c *gin.Context) {
 	if c.Request.Method == "POST" {
 		var err error
-		var req EditAccountRequest
+		var req model.EditAccountRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusOK, gin.H{"error": err.Error()})
 			return
 		}
 
-		accID, err := strconv.ParseInt(req.ID, 10, 64)
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{"error": "invalid model id"})
-			return
-		}
-
-		passwordExpiredTime := time.Time{}
 		if req.PasswordExpired != "" {
-			passwordExpiredTime, err = time.Parse("2006-01-02", req.PasswordExpired)
+			req.PasswordExpiredTime, err = time.Parse("2006-01-02", req.PasswordExpired)
 			if err != nil {
 				c.JSON(http.StatusOK, gin.H{"error": "invalid password expired time"})
 				return
 			}
 		}
 
-		var storageQuota int64
 		if req.StorageQuota == "" {
-			storageQuota = -1
+			req.StorageQuotaNumber = -1
 		} else {
-			storageQuota, err = strconv.ParseInt(req.StorageQuota, 10, 64)
+			req.StorageQuotaNumber, err = strconv.ParseInt(req.StorageQuota, 10, 64)
 			if err != nil {
 				log.Println(err)
 			}
 		}
-		err = model.EditAccount(accID, req.Password, storageQuota, passwordExpiredTime)
+		err = model.EditAccount(req)
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{"error": "edit model failed:" + err.Error()})
+			c.JSON(http.StatusOK, gin.H{"error": "edit account failed:" + err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"success": "edit model success"})
+		c.JSON(http.StatusOK, gin.H{"success": "edit account success"})
 	} else {
 		c.JSON(http.StatusOK, gin.H{"error": "method not allowed"})
 	}

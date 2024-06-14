@@ -1,9 +1,9 @@
-package dns
+package easydns
 
 import "testing"
 
 func TestResolver_LookupMX(t *testing.T) {
-	r := NewResolver("8.8.8.8")
+	r := New("8.8.8.8")
 
 	mxs, err := r.LookupMX("qq.com")
 
@@ -15,7 +15,7 @@ func TestResolver_LookupMX(t *testing.T) {
 }
 
 func TestResolver_LookupSPF(t *testing.T) {
-	r := NewResolver("8.8.8.8")
+	r := New("8.8.8.8")
 
 	mxs, err := r.LookupSPF("qq.com")
 
@@ -27,7 +27,7 @@ func TestResolver_LookupSPF(t *testing.T) {
 }
 
 func TestResolver_LookupDKIM(t *testing.T) {
-	r := NewResolver("8.8.8.8")
+	r := New("8.8.8.8")
 
 	mxs, err := r.LookupDKIM("_domainkey.qq.com", "default")
 
@@ -39,7 +39,7 @@ func TestResolver_LookupDKIM(t *testing.T) {
 }
 
 func TestResolver_LookupDMARC(t *testing.T) {
-	r := NewResolver("8.8.8.8")
+	r := New("8.8.8.8")
 
 	mxs, err := r.LookupDMARC("qq.com")
 
@@ -47,5 +47,17 @@ func TestResolver_LookupDMARC(t *testing.T) {
 		t.Errorf("LookupDMARC returned an error: %v", err)
 	} else {
 		t.Logf("DMARC records for example.com: %v", mxs)
+	}
+}
+
+func TestDomainExist(t *testing.T) {
+	r := New("8.8.8.8")
+
+	exist, err := r.DomainExist("baidu.com")
+
+	if err != nil {
+		t.Errorf("DomainExist returned an error: %v", err)
+	} else {
+		t.Logf("Domain exist: %v", exist)
 	}
 }

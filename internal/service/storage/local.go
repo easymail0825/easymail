@@ -23,7 +23,7 @@ type LocalStorage struct {
 	lock    sync.Mutex
 }
 
-func (s *LocalStorage) Query(accID, folderID int64, orderFiled, orderDir string, page, pageSize int) (total, news int64, emails []model.Email, err error) {
+func (s *LocalStorage) Query(accID, folderID int64, orderField, orderDir string, page, pageSize int) (total, news int64, emails []model.Email, err error) {
 	emails = make([]model.Email, 0)
 	query := db.Model(&emails).Where("account_id = ?", accID).Where("folder_id = ?", folderID)
 	err = query.Count(&total).Error
@@ -34,8 +34,8 @@ func (s *LocalStorage) Query(accID, folderID int64, orderFiled, orderDir string,
 	if err != nil {
 		return
 	}
-	if orderFiled != "" && orderDir != "" {
-		query = query.Order(fmt.Sprintf("%s %s", orderFiled, orderDir))
+	if orderField != "" && orderDir != "" {
+		query = query.Order(fmt.Sprintf("%s %s", orderField, orderDir))
 	}
 	err = query.Limit(pageSize).Offset(page).Find(&emails).Error
 	return

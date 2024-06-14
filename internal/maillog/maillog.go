@@ -110,7 +110,7 @@ func Save(mailLog *MailLog) error {
 	return db.Model(mailLog).Create(mailLog).Error
 }
 
-func Index(startTime, endTime time.Time, searchField int, keyword, orderFiled, orderDir string, page, pageSize int) (int64, []MailLog, error) {
+func Index(startTime, endTime time.Time, searchField int, keyword, orderField, orderDir string, page, pageSize int) (int64, []MailLog, error) {
 	logs := make([]MailLog, 0)
 	query := db.Model(&logs)
 
@@ -140,8 +140,8 @@ func Index(startTime, endTime time.Time, searchField int, keyword, orderFiled, o
 	var total int64
 	query.Count(&total)
 
-	if orderFiled != "" && orderDir != "" {
-		query = query.Order(fmt.Sprintf("%s %s", orderFiled, orderDir))
+	if orderField != "" && orderDir != "" {
+		query = query.Order(fmt.Sprintf("%s %s", orderField, orderDir))
 	}
 	query = query.Offset(page).Limit(pageSize)
 	err := query.Find(&logs).Error

@@ -58,7 +58,7 @@ func (home HomeController) Login(c *gin.Context) {
 
 		// set session
 		sess := sessions.Default(c)
-		sess.Set("model", acc)
+		sess.Set("account", acc)
 		err = sess.Save()
 		if err != nil {
 			log.Println("failed to save session:", err)
@@ -96,7 +96,7 @@ func (home HomeController) ChangePassword(context *gin.Context) {
 
 func (home HomeController) Dashboard(c *gin.Context) {
 	sess := sessions.Default(c)
-	acc := sess.Get("model").(model.Account)
+	acc := sess.Get("account").(model.Account)
 	menu := createMenu()
 	c.HTML(http.StatusOK, "home_dashboard.html", gin.H{
 		"title":    "Dashboard of admin - Easymail",

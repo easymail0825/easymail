@@ -4,36 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"time"
 )
-
-func QueryPtr(ip string) (string, error) {
-	ctx := context.Background()
-	key := fmt.Sprintf("ip:ptr:%s", ip)
-
-	// get from redis first
-	if v, err := rdb.Get(ctx, key).Result(); err == nil {
-		return v, nil
-	}
-
-	// get from dns
-	data, err := resolver.LookupPtr(ip)
-	if err != nil {
-		return "", err
-	}
-	if len(data) == 0 {
-		return "", nil
-	}
-
-	// then save to redis
-	rdb.Set(ctx, key, data[0], 24*time.Hour)
-	return data[0], nil
-}
-
-type keyValue struct {
-	key   string
-	value any
-}
 
 /*
 QueryRegion
@@ -109,7 +80,7 @@ func QueryRegion(ip net.IP) (country, province, city string, err error) {
 		}
 	}
 
-	// Get data of IP.
+	// Get bodyData of IP.
 	anyData := make(map[string]any)
 	_, ok, err := geoip.LookupNetwork(ip, &anyData)
 	if err != nil {

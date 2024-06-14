@@ -8,7 +8,7 @@ func featureSwitch(names []string) bool {
 	if len(names) == 0 {
 		return false
 	}
-	c, err := model.GetConfigure(names...)
+	c, err := model.GetConfigureByNames(names...)
 	if err != nil {
 		return false
 	}

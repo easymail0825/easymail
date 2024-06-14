@@ -19,25 +19,12 @@ func TestGetRootConfigureRootNodes(t *testing.T) {
 	}
 }
 
-func TestGetConfigureByParentId(t *testing.T) {
-	nodes, err := GetConfigureByParentId(15)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	t.Log(nodes)
-
-	for _, node := range nodes {
-		t.Log(node.Name)
-	}
-}
-
 func TestAddConfigure(t *testing.T) {
 	type ConfigureItem struct {
-		names    []string
-		value    string
-		dataType DataType
-		describe string
+		names       []string
+		value       string
+		dataType    DataType
+		description string
 	}
 
 	defaultConfigureItems := []ConfigureItem{
@@ -103,8 +90,8 @@ func TestAddConfigure(t *testing.T) {
 		//{[]string{"feature", "text-hash", "1hour-spam-rate"}, "true", DataTypeBool, "text hash spam rate in 1 hour"},
 	}
 	for _, cfg := range defaultConfigureItems {
-		if _, err := GetConfigure(cfg.names...); errors.Is(err, gorm.ErrRecordNotFound) {
-			_, err = CreateConfigure(cfg.value, cfg.describe, cfg.dataType, cfg.names...)
+		if _, err := GetConfigureByNames(cfg.names...); errors.Is(err, gorm.ErrRecordNotFound) {
+			_, err = CreateConfigure(cfg.value, cfg.description, cfg.dataType, cfg.names...)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -28,7 +28,7 @@ type Queue struct {
 
 func Dump() ([]Queue, error) {
 	queues := make([]Queue, 0)
-	c, err := model.GetConfigure("postfix", "execute", "postqueue")
+	c, err := model.GetConfigureByNames("postfix", "execute", "postqueue")
 	if err != nil {
 		return queues, err
 	}
@@ -65,7 +65,7 @@ func Dump() ([]Queue, error) {
 }
 
 func View(queueID string) (string, error) {
-	c, err := model.GetConfigure("postfix", "execute", "postcat")
+	c, err := model.GetConfigureByNames("postfix", "execute", "postcat")
 	if err != nil {
 		return "", err
 	}
@@ -80,7 +80,7 @@ func View(queueID string) (string, error) {
 }
 
 func Flush(queueID string) (string, error) {
-	c, err := model.GetConfigure("postfix", "execute", "postsuper")
+	c, err := model.GetConfigureByNames("postfix", "execute", "postsuper")
 	if err != nil {
 		return "", err
 	}
@@ -94,7 +94,7 @@ func Flush(queueID string) (string, error) {
 }
 
 func Delete(queueID string) (string, error) {
-	c, err := model.GetConfigure("postfix", "execute", "postsuper")
+	c, err := model.GetConfigureByNames("postfix", "execute", "postsuper")
 	if err != nil {
 		return "", err
 	}

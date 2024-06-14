@@ -4,8 +4,32 @@
 {{end}}
 
 {{ block "content" .}}
-<div class="row m-3 mb-5">
-
+<div class="row mb-5">
+    <div class="col-lg-2 col-3">
+        <div class="input-group">
+            <select class="form-control" id="subNodeList" name="subNodeList">
+                <option value="0" selected>all node</option>
+                {{ range $subNode := .subNodes }}
+                <option value="{{ $subNode.ID }}">
+                    {{$subNode.Name }}
+                </option>
+                {{ end }}
+            </select>
+        </div>
+    </div>
+    <div class="col-4">
+        <div class="input-group">
+            <input type="text" name="keyword" id="keyword" class="form-control"
+                   placeholder="Please input keyword to search">
+            <span class="input-group-append btn btn-info" id="search"> <i class="fa fa-search"></i>Search</span>
+        </div>
+    </div>
+    <div class="col-2 d-flex justify-content-end">
+        <button class="btn btn-primary" type="button" id="btn_createDomain" data-bs-toggle="modal"
+                data-bs-target="#createAccountModal">
+            <i class="fa fa-plus-circle"></i> Create Configure
+        </button>
+    </div>
 </div>
 <div class="row">
     <div class="col-12">
@@ -13,29 +37,17 @@
             <thead>
             <tr>
                 <th>ID</th>
-                <th>Parent</th>
+                <th>TopName</th>
+                <th>SubName</th>
                 <th>Name</th>
                 <th>Value</th>
                 <th>DataType</th>
                 <th>Private</th>
                 <th>Create</th>
                 <th>Describe</th>
+                <th></th>
             </tr>
             </thead>
-            <tbody>
-            {{ range $index, $node := .data}}
-            <tr>
-                <td>{{$node.ID}}</td>
-                <td>{{$node.SubName}}</td>
-                <td>{{$node.Name}}</td>
-                <td>{{$node.Value}}</td>
-                <td>{{$node.DataType}}</td>
-                <td>{{$node.Private}}</td>
-                <td>{{$node.CreateTime}}</td>
-                <td>{{$node.Describe}}</td>
-            </tr>
-            {{end}}
-            </tbody>
         </table>
     </div>
 </div>
@@ -48,65 +60,136 @@
 <script>
     $(document).ready(function () {
         let table = new DataTable('#configureTable', {
-            columnDefs: [{
-                // The `data` parameter refers to the data for the cell (defined by the
-                // `data` option, which defaults to the column being worked with, in
-                // this case `data: 0`.
-                render: function (data, type, row) {
-                    if (data === "0") {
-                        return "string"
-                    } else if (data === "1") {
-                        return "int"
-                    } else if (data === "2") {
-                        return "float"
-                    } else if (data === "3") {
-                        return "bool"
-                    } else if (data === "4") {
-                        return "null"
-                    } else if (data === "5") {
-                        return "child"
-                    } else {
-                        return "unknown"
+            "processing": true,
+            "serverSide": true,
+            "searching": false,
+            "order": [[0, "desc"]],
+            "ajax": {
+                "url": "/configure/node/{{.id}}",
+                "type": "POST",
+                "contentType": "application/json",
+                "data": function (d) {
+                    return JSON.stringify({
+                        "draw": d.draw,
+                        "columns": d.columns,
+                        "order": d.order,
+                        "start": d.start,
+                        "length": d.length,
+                        "search": d.search,
+                        "keyword": $("#keyword").val(),
+                        "subNodeID": Number($("#subNodeList").val()),
+                    });
+                }
+            },
+            'columns': [
+                {'data': 'id'},
+                {'data': 'topName'},
+                {'data': 'subName'},
+                {'data': 'name'},
+                {'data': 'value'},
+                {
+                    'data': 'dataType',
+                    'render': function (data, type, row, meta) {
+                        if (data === 0) {
+                            return "string"
+                        } else if (data === 1) {
+                            return "int"
+                        } else if (data === 2) {
+                            return "float"
+                        } else if (data === 3) {
+                            return "bool"
+                        } else if (data === 4) {
+                            return "null"
+                        } else if (data === 5) {
+                            return "child"
+                        } else {
+                            return "unknown"
+                        }
                     }
                 },
-                targets: 4
-            }, {
+                {'data': 'private'},
+                {
+                    'data': 'createTime',
+                    'render': function (data, type, row, meta) {
+                        const momentDate = moment(data);
+                        return momentDate.format('YYYY-MM-DD HH:mm:ss');
+                    }
+                },
+                {'data': 'describe'},
+                {
+                    'data': null, 'render': function (data, type, row, meta) {
+                        if (type === 'display') {
+                            let activeButton = '';
+                            let editButton = '';
+                            let deleteButton = '';
+                            if (data.status === 0) {
+                                activeButton = '<button class="btn btn-link btn-active" data-id="' + data.id + '">suspect</button>'
+                                editButton = '<button class="btn btn-link btn-edit" data-id="' + data.id +
+                                    '" data-username="' + data.username + '" data-quota="' + row.storageQuota + '" data-expired="' + row.expiredTime + '">edit</button>'
+                                deleteButton = '<button class="btn btn-link btn-delete" data-id="' + data.id + '">delete</button>';
+                            } else if (data.status === 1) {
+                                activeButton = '<button class="btn btn-link btn-active" data-id="' + data.id + '">active</button>'
+                                deleteButton = '<button class="btn btn-link btn-delete" data-id="' + data.id + '">delete</button>';
+                            }
+                            return activeButton + editButton + deleteButton;
+                        }
+                        return data;
+                    }
+                },
+            ],
+            columnDefs: [{
                 fnCreatedCell: function (cell, cellData, rowData, rowIndex, colIndex) {
                     let trow = null;
+                    let oldValue = null
+                    let oldDescribe = null
                     $(cell).click(function () {
-                        $(this).html('<input type="text" value="请输入" size="16" style="width: 100%"/>');
+                        $(this).html('<input type="text" value="Please Input" size="16" style="width: 100%"/>');
                         let aInput = $(this).find(":input");
                         aInput.focus().val(cellData);
                         trow = table.row($(this)).data();
+                        oldValue = trow.value
+                        oldDescribe = trow.describe
                     });
                     $(cell).on("blur", ":input", function () {
                         let text = $(this).val();
                         $(cell).html(text);
                         table.cell(cell).data(text);
-                        console.info("当前修改行:" + JSON.stringify(trow));
-                        let id = rowData[0]
-                        $.ajax({
-                            type: "POST",
-                            url: "/configure/node/"+id,
-                            data: JSON.stringify({
-                                value: rowData[3],
-                                describe: rowData[7]
-                            }),
-                            contentType: 'application/json',
-                            success: function (data) {
-                                if (!data.success) {
-                                    alert(data.error)
+                        let id = rowData.id
+                        let newValue = rowData.value
+                        let newDescribe = rowData.describe
+                        if (oldValue !== newValue || oldDescribe !== newDescribe) {
+                            $.ajax({
+                                type: "POST",
+                                url: "/configure/node/edit/" + id,
+                                data: JSON.stringify({
+                                    value: newValue,
+                                    describe: newDescribe
+                                }),
+                                contentType: 'application/json',
+                                success: function (data) {
+                                    if (!data.success) {
+                                        alert(data.error)
+                                    }
+                                },
+                                error: function (xhr, status, error) {
+                                    showMsg("Request failed:" + error)
                                 }
-                            },
-                            error: function (xhr, status, error) {
-                                showMsg("Request failed:" + error)
-                            }
-                        })
+                            })
+                        }
                     });
                 },
-                targets: [3, 7],
+                targets: [4, 8],
             }]
         });
+
+
+        $("#search").on("click", function () {
+            table.ajax.reload();
+        })
+
+        $("#subNodeList").on("change", function () {
+            table.ajax.reload();
+        })
     })
 </script>
 {{end}}

@@ -1,4 +1,4 @@
-package controller
+package model
 
 type Column struct {
 	Data       string `json:"data"`

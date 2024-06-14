@@ -2,6 +2,7 @@ package controller
 
 import (
 	"easymail/internal/maillog"
+	"easymail/internal/model"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"html"
@@ -10,21 +11,6 @@ import (
 )
 
 type MailLogController struct{}
-
-type MailLogIndexRequest struct {
-	DataTableRequest
-	StartDate   string `json:"startDate"`
-	EndDate     string `json:"endDate"`
-	Keyword     string `json:"keyword"`
-	SearchField int    `json:"searchField"`
-}
-type MailLogIndexResponse struct {
-	ID        int64     `json:"id"`
-	LogTime   time.Time `json:"logTime"`
-	SessionID string    `json:"sessionID"`
-	Process   string    `json:"process"`
-	Message   string    `json:"message"`
-}
 
 func (a *MailLogController) Index(c *gin.Context) {
 	if c.Request.Method == "GET" {
@@ -40,7 +26,7 @@ func (a *MailLogController) Index(c *gin.Context) {
 		})
 		return
 	} else if c.Request.Method == "POST" {
-		var req MailLogIndexRequest
+		var req model.IndexMailLogRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusOK, gin.H{"error": err.Error()})
 			return
@@ -75,9 +61,9 @@ func (a *MailLogController) Index(c *gin.Context) {
 			return
 		}
 
-		data := make([]MailLogIndexResponse, 0)
+		data := make([]model.IndexMailLogResponse, 0)
 		for _, l := range logs {
-			data = append(data, MailLogIndexResponse{
+			data = append(data, model.IndexMailLogResponse{
 				ID:        l.ID,
 				LogTime:   l.LogTime,
 				SessionID: l.SessionID,

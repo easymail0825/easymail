@@ -128,7 +128,7 @@ func initialize() (err error) {
 		{[]string{"postfix", "execute", "postfix"}, "/usr/sbin/postfix", model.DataTypeString},
 	}
 	for _, cfg := range defaultConfigureItems {
-		if _, err := model.GetConfigure(cfg.names...); errors.Is(err, gorm.ErrRecordNotFound) {
+		if _, err := model.GetConfigureByNames(cfg.names...); errors.Is(err, gorm.ErrRecordNotFound) {
 			_, err = model.CreateConfigure(cfg.value, "", cfg.dataType, cfg.names...)
 			if err != nil {
 				return err
@@ -177,7 +177,7 @@ func initialize() (err error) {
 				return err
 			}
 		} else if app.Name == "lmtp" && app.Enable {
-			c, err := model.GetConfigure("postfix", "configure", "virtual_mailbox_domains")
+			c, err := model.GetConfigureByNames("postfix", "configure", "virtual_mailbox_domains")
 			if err != nil {
 				return err
 			}
@@ -270,7 +270,7 @@ func main() {
 				}
 			}()
 		case "filter":
-			s := filter.New(app.Family, app.Listen)
+			s := filter.New(app.Family, app.Listen, _log)
 			if err = s.SetLogger(_log); err != nil {
 				panic(err)
 			}
@@ -287,11 +287,11 @@ func main() {
 			}
 			serviceRegistry.Register(s)
 			go func() {
-				c, err := model.GetConfigure("easymail", "storage", "data")
+				c, err := model.GetConfigureByNames("easymail", "storage", "data")
 				if err != nil {
 					log.Fatal("mail storage data is not defined")
 				}
-				r, err := model.GetConfigure("easymail", "configure", "root")
+				r, err := model.GetConfigureByNames("easymail", "configure", "root")
 				if err != nil {
 					log.Fatal("easymail configure root is not defined")
 				}
