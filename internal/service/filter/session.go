@@ -348,7 +348,7 @@ func (s *Session) Process(msg *milter.Message) (milter.Response, []milter.Featur
 			for _, f := range fields {
 				switch strings.ToLower(f.Name) {
 				case "rcpt":
-					if len(s.payload["rcpt"]) == 0 {
+					if len(s.payload["Rcpt"]) == 0 {
 						s.payload["Rcpt"] = cleanTo
 					} else {
 						s.payload["Rcpt"] = s.payload["Rcpt"] + "," + cleanTo
@@ -543,7 +543,8 @@ func (s *Session) Handle() {
 							// execute rules
 							err = ruleEngine.Execute(dataContext, knowledgeInstance)
 							if err != nil {
-								panic(err)
+								s._log.Errorf("rule engine execute failed: %+v", err)
+								resp = milter.RespTempFail
 							}
 						}
 					}

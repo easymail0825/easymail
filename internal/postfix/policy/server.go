@@ -148,37 +148,34 @@ func (s *Server) handleClient(conn net.Conn) {
 
 	// then send the CPS response, action=dunno is allow, and action=reject is rejected
 	action := "reject"
+	defer func() {
+		_, _ = conn.Write([]byte("action=" + action + "\n\n"))
+		s._log.Infof("policy check done, sender=%s, recipient=%s, action=%s\n", sender, recipient, action)
+	}()
 
 	if sender == "" {
-		_, err = conn.Write([]byte("action=reject\n\n"))
-	} else {
-		_, err = model.FindAccountByName(sender)
-		if err != nil {
-			_, err = conn.Write([]byte("action=reject\n\n"))
-		}
+		return
 	}
+	if _, err = model.FindAccountByName(sender); err != nil {
+		return
+	}
+
 	if recipient == "" {
-		_, err = conn.Write([]byte("action=reject\n\n"))
-	} else {
-		// check recipient domain first
-		recipient = strings.ToLower(recipient)
-		d := strings.SplitN(recipient, "@", 2)
-		if len(d) != 2 {
-			_, err = conn.Write([]byte("action=reject\n\n"))
-		}
-		_, err := model.FindDomainByName(d[1])
-
-		// if domain exists, then check model
-		if err == nil {
-			_, err = model.FindAccountByName(recipient)
-			if err != nil {
-				_, err = conn.Write([]byte("action=reject\n\n"))
-			}
-		}
-
-		// allow to send outside
-		action = "dunno"
-		_, err = conn.Write([]byte("action=dunno\n\n"))
-		s._log.Infof("policy check done, sender=%s, recipient=%s, action=%s\n", sender, recipient, action)
+		return
 	}
+
+	recipient = strings.ToLower(recipient)
+	d := strings.SplitN(recipient, "@", 2)
+	if len(d) != 2 {
+		return
+	}
+	_, domainErr := model.FindDomainByName(d[1])
+
+	// internal domain mail must target existing account; external mail is allowed.
+	if domainErr == nil {
+		if _, err = model.FindAccountByName(recipient); err != nil {
+			return
+		}
+	}
+	action = "dunno"
 }

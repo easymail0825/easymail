@@ -3,8 +3,9 @@ package dovecot
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"easymail/internal/easylog"
-	"easymail/internal/model"
+	"easymail/internal/identity"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -33,13 +34,20 @@ type Server struct {
 	count int64
 }
 
+var identityService = identity.NewService()
+
 func New(family, listen string) *Server {
 	if family != "tcp" && family != "unix" {
 		return nil
 	}
 
-	fields := strings.Split(listen, ":")
-	if len(fields) != 2 {
+	if family == "tcp" {
+		fields := strings.Split(listen, ":")
+		if len(fields) != 2 {
+			return nil
+		}
+	}
+	if family == "unix" && strings.TrimSpace(listen) == "" {
 		return nil
 	}
 
@@ -177,7 +185,7 @@ func (s *Server) Handle(conn net.Conn) (err error) {
 	if err = sess.sendLine("MECH", "PLAIN", "plaintext"); err != nil {
 		return errors.New(fmt.Sprintf("send MECH failed"))
 	}
-	if err = sess.sendLine("SPID", strconv.Itoa(os.Getgid())); err != nil {
+	if err = sess.sendLine("SPID", strconv.Itoa(os.Getpid())); err != nil {
 		return errors.New(fmt.Sprintf("send SPID failed"))
 	}
 	if err = sess.sendLine("CUID", strconv.FormatInt(s.count, 10)); err != nil {
@@ -258,7 +266,7 @@ func (s *Server) Handle(conn net.Conn) (err error) {
 		password := string(authPair[2])
 
 		// authorize username with the password
-		_, err = model.Authorize(sess.username, password)
+		_, err = identityService.Authenticate(context.Background(), sess.username, password)
 		if err != nil {
 			data["error"] = "invalid username or password"
 			if s.debug {

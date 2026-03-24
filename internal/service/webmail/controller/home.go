@@ -1,7 +1,9 @@
 package controller
 
 import (
-	"easymail/internal/model"
+	"context"
+	sessionkey "easymail/internal/application/session"
+	"easymail/internal/identity"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"log"
@@ -10,6 +12,8 @@ import (
 )
 
 type HomeController struct{}
+
+var webmailIdentityService = identity.NewService()
 type loginRequest struct {
 	Username string `form:"username" binding:"required,email,min=6"`
 	Password string `form:"password" binding:"required,min=6"`
@@ -50,7 +54,7 @@ func (home HomeController) Login(c *gin.Context) {
 			return
 		}
 
-		acc, err := model.Authorize(username, password)
+		acc, err := webmailIdentityService.Authenticate(context.Background(), username, password)
 		if err != nil {
 			c.HTML(http.StatusOK, "single_login.html", gin.H{
 				"username": username,
@@ -62,8 +66,8 @@ func (home HomeController) Login(c *gin.Context) {
 
 		// set session
 		sess := sessions.Default(c)
-		sess.Set("userID", strconv.Itoa(int(acc.ID)))
-		sess.Set("mailbox", username)
+		sess.Set(sessionkey.KeyUserID, strconv.Itoa(int(acc.ID)))
+		sess.Set(sessionkey.KeyMailbox, username)
 		err = sess.Save()
 		if err != nil {
 			log.Println("failed to save session:", err)

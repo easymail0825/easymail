@@ -35,6 +35,9 @@ func init() {
 		log.Println("Error reading app config:", err)
 		return
 	}
+	if err = database.Initialize("easymail.yaml"); err != nil {
+		log.Println("Error initializing database:", err)
+	}
 }
 
 func initialize() (err error) {

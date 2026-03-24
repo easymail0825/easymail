@@ -1,22 +1,32 @@
 package controller
 
 import (
-	_ "easymail/internal/database"
+	"errors"
 	"easymail/internal/model"
 	"easymail/internal/service/storage"
-	"log"
+	"sync"
 )
 
 var localStorage *storage.LocalStorage
+var localStorageOnce sync.Once
+var localStorageErr error
 
-func init() {
-	c, err := model.GetConfigureByNames("easymail", "storage", "data")
-	if err != nil {
-		log.Fatal("mail storage data is not defined")
+func getLocalStorage() (*storage.LocalStorage, error) {
+	localStorageOnce.Do(func() {
+		c, err := model.GetConfigureByNames("easymail", "storage", "data")
+		if err != nil {
+			localStorageErr = errors.New("mail storage data is not defined")
+			return
+		}
+		r, err := model.GetConfigureByNames("easymail", "configure", "root")
+		if err != nil {
+			localStorageErr = errors.New("easymail configure root is not defined")
+			return
+		}
+		localStorage = storage.NewLocalStorage(r.Value, c.Value)
+	})
+	if localStorageErr != nil {
+		return nil, localStorageErr
 	}
-	r, err := model.GetConfigureByNames("easymail", "configure", "root")
-	if err != nil {
-		log.Fatal("easymail configure root is not defined")
-	}
-	localStorage = storage.NewLocalStorage(r.Value, c.Value)
+	return localStorage, nil
 }

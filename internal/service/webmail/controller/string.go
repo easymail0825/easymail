@@ -1,7 +1,7 @@
 package controller
 
 import (
-	"fmt"
+	sessionkey "easymail/internal/application/session"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"log"
@@ -13,13 +13,13 @@ import (
 
 func GetAccountID(c *gin.Context) (int64, error) {
 	sess := sessions.Default(c)
-	userIDS := sess.Get("userID")
+	userIDS := sess.Get(sessionkey.KeyUserID)
 	return strconv.ParseInt(userIDS.(string), 10, 64)
 }
 
 func GetMailbox(c *gin.Context) string {
 	sess := sessions.Default(c)
-	mailbox := sess.Get("mailbox")
+	mailbox := sess.Get(sessionkey.KeyMailbox)
 	return mailbox.(string)
 }
 
@@ -99,7 +99,7 @@ func SendMailOpenRelay(host string, sender string, receipts []string, subject st
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(wc, string(body))
+	_, err = wc.Write(body)
 	if err != nil {
 		return err
 	}

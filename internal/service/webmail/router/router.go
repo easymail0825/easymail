@@ -2,6 +2,7 @@ package router
 
 import (
 	"easymail/internal/easylog"
+	"easymail/internal/observability/health"
 	"easymail/internal/service/webmail/controller"
 	"easymail/internal/service/webmail/middleware"
 	"github.com/gin-contrib/multitemplate"
@@ -25,22 +26,7 @@ func New(_log *easylog.Logger, root, cookiePassword, cookieTag string) *gin.Engi
 	r.Use(middleware.Access(_log))
 
 	// heartbeat check
-	r.GET("/check", func(c *gin.Context) {
-		count := 0
-		sess := sessions.Default(c)
-		if sess.Get("counter") == nil {
-			sess.Set("counter", 1)
-			sess.Save()
-		} else {
-			count = sess.Get("counter").(int)
-			sess.Set("counter", count+1)
-			sess.Save()
-		}
-		c.JSON(200, gin.H{
-			"count": count,
-		})
-		return
-	})
+	r.GET("/check", health.CheckHandler)
 
 	// load template
 	r.HTMLRender = loadTemplates(path.Join(root, "template"))

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	sessionkey "easymail/internal/application/session"
 	"easymail/internal/model"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -109,8 +110,11 @@ func (*FilterController) CreateMetric(c *gin.Context) {
 			return
 		}
 		sess := sessions.Default(c)
-		acc := sess.Get("account").(model.Account)
-		req.AccountID = acc.ID
+		username, _ := sess.Get(sessionkey.KeyAdminAccount).(string)
+		acc, err := model.FindAccountByName(username)
+		if err == nil && acc != nil {
+			req.AccountID = acc.ID
+		}
 
 		// edit
 		if req.ID > 0 {

@@ -1,7 +1,9 @@
 package controller
 
 import (
-	"easymail/internal/model"
+	"context"
+	sessionkey "easymail/internal/application/session"
+	"easymail/internal/identity"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"log"
@@ -9,6 +11,8 @@ import (
 )
 
 type HomeController struct{}
+
+var adminIdentityService = identity.NewService()
 
 type loginRequest struct {
 	Username string `form:"username" binding:"required,min=6"`
@@ -46,7 +50,7 @@ func (home HomeController) Login(c *gin.Context) {
 			return
 		}
 
-		acc, err := model.Authorize(username, password)
+		acc, err := adminIdentityService.Authenticate(context.Background(), username, password)
 		if err != nil {
 			c.HTML(http.StatusOK, "single_login.html", gin.H{
 				"username": username,
@@ -58,7 +62,8 @@ func (home HomeController) Login(c *gin.Context) {
 
 		// set session
 		sess := sessions.Default(c)
-		sess.Set("account", acc)
+		sess.Set(sessionkey.KeyAdminAccount, acc.Username)
+		sess.Set("userName", acc.Username)
 		err = sess.Save()
 		if err != nil {
 			log.Println("failed to save session:", err)
@@ -96,11 +101,11 @@ func (home HomeController) ChangePassword(context *gin.Context) {
 
 func (home HomeController) Dashboard(c *gin.Context) {
 	sess := sessions.Default(c)
-	acc := sess.Get("account").(model.Account)
+	username, _ := sess.Get(sessionkey.KeyAdminAccount).(string)
 	menu := createMenu()
 	c.HTML(http.StatusOK, "home_dashboard.html", gin.H{
 		"title":    "Dashboard of admin - Easymail",
-		"username": acc.Username,
+		"username": username,
 		"module":   "dashboard",
 		"page":     "home",
 		"menu":     menu,

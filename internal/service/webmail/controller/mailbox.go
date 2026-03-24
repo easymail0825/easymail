@@ -116,7 +116,12 @@ func (m *MailboxController) Folder(c *gin.Context) {
 		break
 	}
 
-	total, news, mails, err := localStorage.Query(accID, folderID, orderField, orderDir, req.Start, req.Length)
+	store, err := getLocalStorage()
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"error": err.Error()})
+		return
+	}
+	total, news, mails, err := store.Query(accID, folderID, orderField, orderDir, req.Start, req.Length)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"error": err.Error()})
 		return
@@ -250,7 +255,12 @@ func (m *MailboxController) Read(c *gin.Context) {
 		return
 	}
 
-	mailContent, err := localStorage.Read(mail.SavePath)
+	store, err := getLocalStorage()
+	if err != nil {
+		c.HTML(http.StatusOK, "single_error.html", gin.H{"error": err.Error()})
+		return
+	}
+	mailContent, err := store.Read(mail.SavePath)
 	if err != nil {
 		c.HTML(http.StatusOK, "single_error.html", gin.H{"error": err.Error()})
 		return
@@ -326,7 +336,12 @@ func (m *MailboxController) DownloadAttach(c *gin.Context) {
 	}
 
 	mail, err := model.GetMail(userID, mid)
-	data, err := localStorage.GetAttach(mail.SavePath, fileName, req.All)
+	store, err := getLocalStorage()
+	if err != nil {
+		c.HTML(http.StatusOK, "single_error.html", gin.H{"error": err.Error()})
+		return
+	}
+	data, err := store.GetAttach(mail.SavePath, fileName, req.All)
 	if err != nil {
 		c.HTML(http.StatusOK, "single_error.html", gin.H{"error": err.Error()})
 		return

@@ -71,8 +71,13 @@ func New(family, listen string, messageLimit int64, extension ...string) *Server
 		return nil
 	}
 
-	fields := strings.Split(listen, ":")
-	if len(fields) != 2 {
+	if family == "tcp" {
+		fields := strings.Split(listen, ":")
+		if len(fields) != 2 {
+			return nil
+		}
+	}
+	if family == "unix" && strings.TrimSpace(listen) == "" {
 		return nil
 	}
 
@@ -326,8 +331,6 @@ func (s *Server) Handle(conn net.Conn) (err error) {
 				_ = writer.PrintfLine("550 receive data failed")
 				break
 			}
-			sess.data.Write(mailData)
-
 			// parse mailData to get subject and postfix queue id
 			var email *model.Email
 			email, err = ParseMail(mailData)
@@ -341,7 +344,7 @@ func (s *Server) Handle(conn net.Conn) (err error) {
 				for _, receipt := range sess.receipts {
 					email.Sender = string(sess.sender)
 					email.Recipient = string(bytes.Join(sess.receipts, []byte(",")))
-					filePath, err := s.storager.Save(string(receipt), email, sess.data)
+					filePath, err := s.storager.Save(string(receipt), email, bytes.NewBuffer(mailData))
 					if err == nil {
 						s._log.Infof("mail derived for %s successfully to %s\n", receipt, filePath)
 						_ = writer.PrintfLine("250 <%s> mail ok", receipt)

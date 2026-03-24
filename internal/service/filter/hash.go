@@ -24,7 +24,8 @@ func computeAttachHash(data []byte) (hash string, err error) {
 // computeAttachMD5 only compute hash for the first 10240 bytes + last 10240 bytes
 func computeAttachMD5(data []byte) (hash string, err error) {
 	if len(data) < 20480 {
-		return ssdeep.FuzzyBytes(data)
+		s := md5.Sum(data)
+		return hex.EncodeToString(s[:]), nil
 	}
 	dist := make([]byte, 20480)
 	copy(dist, data[:10240])

@@ -1,14 +1,30 @@
 package database
 
+import (
+	"fmt"
+	"sync"
+)
+
+var initOnce sync.Once
+var initErr error
+
+func Initialize(configPath string) error {
+	initOnce.Do(func() {
+		appConfig, err := ReadAppConfig(configPath)
+		if err != nil {
+			initErr = fmt.Errorf("read app config failed: %w", err)
+			return
+		}
+		// initialize database first
+		if err = initMySQL(appConfig.Mysql); err != nil {
+			initErr = fmt.Errorf("connect mysql failed: %w", err)
+			return
+		}
+		initRedis(appConfig.Redis)
+	})
+	return initErr
+}
+
 func init() {
-	appConfig, err := ReadAppConfig("easymail.yaml")
-	if err != nil {
-		panic(err)
-	}
-	// initialize database first
-	err = initMySQL(appConfig.Mysql)
-	if err != nil {
-		panic("failed to connect to database")
-	}
-	initRedis(appConfig.Redis)
+	_ = Initialize("easymail.yaml")
 }
