@@ -55,22 +55,38 @@ type Attachment struct {
 }
 
 func GetMailQuantity(accID int64) (total int64, err error) {
-	err = db.Model(&Email{}).Where("account_id = ?", accID).Count(&total).Error
+	d, err := getDB()
+	if err != nil {
+		return 0, err
+	}
+	err = d.Model(&Email{}).Where("account_id = ?", accID).Count(&total).Error
 	return
 }
 
 func GetMailUsage(accID int64) (total int64, err error) {
-	err = db.Model(&Email{}).Select("SUM(size) as total").Where("account_id = ?", accID).Scan(&total).Error
+	d, err := getDB()
+	if err != nil {
+		return 0, err
+	}
+	err = d.Model(&Email{}).Select("SUM(size) as total").Where("account_id = ?", accID).Scan(&total).Error
 	return
 }
 
 func MarkRead(accID int64, mailID int64, readSource ReadStatus) error {
-	return db.Model(&Email{}).Where("account_id = ? and id = ? and read_status=?", accID, mailID, UnRead).Update("read_status", readSource).Error
+	d, err := getDB()
+	if err != nil {
+		return err
+	}
+	return d.Model(&Email{}).Where("account_id = ? and id = ? and read_status=?", accID, mailID, UnRead).Update("read_status", readSource).Error
 }
 
 func GetMail(accID int64, mailID int64) (mail *Email, err error) {
+	d, err := getDB()
+	if err != nil {
+		return nil, err
+	}
 	mail = &Email{}
-	err = db.Where("account_id = ? and id = ?", accID, mailID).First(mail).Error
+	err = d.Where("account_id = ? and id = ?", accID, mailID).First(mail).Error
 	return
 }
 

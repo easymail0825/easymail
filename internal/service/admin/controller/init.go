@@ -1,12 +1,16 @@
 package controller
 
 import (
-	_ "easymail/internal/database"
 	"easymail/internal/easydns"
+	"sync"
 )
 
 var resolver *easydns.Resolver
+var resolverOnce sync.Once
 
-func init() {
-	resolver = easydns.CreateDefaultResolver()
+func getResolver() *easydns.Resolver {
+	resolverOnce.Do(func() {
+		resolver = easydns.CreateDefaultResolver()
+	})
+	return resolver
 }

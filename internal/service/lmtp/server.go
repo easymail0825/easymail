@@ -2,8 +2,10 @@ package lmtp
 
 import (
 	"bytes"
+	"context"
 	"easymail/internal/easylog"
 	"easymail/internal/model"
+	"easymail/internal/observability/sessiontrace"
 	"easymail/internal/service/storage"
 	"fmt"
 	"log"
@@ -64,6 +66,8 @@ type Server struct {
 	handleData    func(session *session) smtpResponse
 	handleRset    func(session *session) smtpResponse
 	storager      storage.Storager
+
+	tracer sessiontrace.Tracer
 }
 
 func New(family, listen string, messageLimit int64, extension ...string) *Server {
@@ -114,6 +118,10 @@ func New(family, listen string, messageLimit int64, extension ...string) *Server
 
 func (s *Server) SetStorage(storager storage.Storager) {
 	s.storager = storager
+}
+
+func (s *Server) SetTracer(t sessiontrace.Tracer) {
+	s.tracer = t
 }
 
 func (s *Server) SetDebug(debug bool) {
@@ -177,7 +185,7 @@ func (s *Server) run() error {
 		go func() {
 			err := s.Handle(conn)
 			if err != nil {
-				s._log.Errorf("handle connection failed:％+v\n", err)
+				s._log.Errorf("handle connection failed:%+v\n", err)
 			}
 		}()
 	}
@@ -205,10 +213,6 @@ func (s *Server) Handle(conn net.Conn) (err error) {
 	if s.debug {
 		s._log.Debugf("lmtp client connected, from %s\n", conn.RemoteAddr().String())
 	}
-	defer func(conn net.Conn) {
-		_ = conn.Close()
-	}(conn)
-
 	sess := &session{
 		conn:         textproto.NewConn(conn),
 		commandStage: commandStageAccept,
@@ -216,6 +220,28 @@ func (s *Server) Handle(conn net.Conn) (err error) {
 		receipts:     make([][]byte, 0),
 		data:         bytes.NewBuffer([]byte{}), // memory leaks?
 	}
+	var span sessiontrace.Session
+	if s.tracer != nil {
+		span = s.tracer.NewSession(context.Background(), sessiontrace.SessionMeta{
+			Protocol: sessiontrace.ProtocolLMTP,
+			Remote:   conn.RemoteAddr().String(),
+			Local:    conn.LocalAddr().String(),
+		})
+		span.Event("connect", nil)
+	}
+	defer func(conn net.Conn) {
+		_ = conn.Close()
+	}(conn)
+	defer func() {
+		if span != nil {
+			if err != nil {
+				span.Error("end", err, nil)
+			}
+			span.End("disconnect", map[string]any{
+				"command_stage": int(sess.commandStage),
+			})
+		}
+	}()
 	reader := sess.conn.Reader
 	writer := sess.conn.Writer
 
@@ -247,7 +273,23 @@ func (s *Server) Handle(conn net.Conn) (err error) {
 				if err := sess.writeResponse(resp); err != nil {
 					s._log.Errorf("write response error:%+v\n", err)
 				}
+				if span != nil {
+					span.Error("parse_command", err, map[string]any{
+						"line": sessiontrace.Trunc(string(line), 256),
+					})
+				}
 				continue
+			}
+			if span != nil {
+				argOut := sessiontrace.Trunc(arg, 256)
+				if cmd == "MAIL" || cmd == "RCPT" {
+					// best-effort masking of addresses
+					argOut = sessiontrace.Trunc(sessiontrace.MaskEmail(arg), 256)
+				}
+				span.Event("command", map[string]any{
+					"cmd": cmd,
+					"arg": argOut,
+				})
 			}
 			switch cmd {
 			case "HELO", "EHLO", "LHLO":
@@ -322,6 +364,11 @@ func (s *Server) Handle(conn net.Conn) (err error) {
 				}
 				if err := sess.writeResponse(resp); err != nil {
 					s._log.Errorf("write response error:%+v\n", err)
+				}
+				if span != nil {
+					span.Event("unknown_command", map[string]any{
+						"cmd": cmd,
+					})
 				}
 			}
 		case clientStageData:

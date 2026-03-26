@@ -27,6 +27,8 @@ func New(_log *easylog.Logger, root, cookiePassword, cookieTag string) *gin.Engi
 
 	// heartbeat check
 	r.GET("/check", health.CheckHandler)
+	r.GET("/live", health.LiveHandler)
+	r.GET("/ready", health.ReadyHandler)
 
 	// load template
 	r.HTMLRender = loadTemplates(path.Join(root, "template"))

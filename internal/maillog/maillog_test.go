@@ -7,10 +7,17 @@ import (
 )
 
 func TestMigrate(t *testing.T) {
-	db.AutoMigrate(&MailLog{})
+	d, err := getDB()
+	if err != nil {
+		t.Skip(err)
+	}
+	d.AutoMigrate(&MailLog{})
 }
 
 func TestInsertFromString(t *testing.T) {
+	if _, err := getDB(); err != nil {
+		t.Skip(err)
+	}
 	s := `Apr 21 21:00:22 racknerd-6a8470 postfix/smtpd[18851]: connect from out203-205-221-153.mail.qq.com[203.205.221.153]
 Apr 21 21:00:24 racknerd-6a8470 postfix/smtpd[18851]: 12087205C7: client=out203-205-221-153.mail.qq.com[203.205.221.153]
 Apr 21 21:00:24 racknerd-6a8470 postfix/cleanup[18856]: 12087205C7: message-id=<tencent_C5BF6673393163ED4E9C2F90B6A007580705@qq.com>

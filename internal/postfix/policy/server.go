@@ -2,8 +2,10 @@ package policy
 
 import (
 	"bufio"
+	"context"
 	"easymail/internal/easylog"
 	"easymail/internal/model"
+	"easymail/internal/observability/sessiontrace"
 	"fmt"
 	"net"
 	"strings"
@@ -19,6 +21,8 @@ type Server struct {
 	listen  string
 	debug   bool
 	_log    *easylog.Logger
+
+	tracer sessiontrace.Tracer
 }
 
 func New(family, listen string) *Server {
@@ -51,6 +55,10 @@ func (s *Server) SetLogger(_log *easylog.Logger) error {
 	}
 	s._log = _log
 	return nil
+}
+
+func (s *Server) SetTracer(t sessiontrace.Tracer) {
+	s.tracer = t
 }
 func (s *Server) Start() error {
 	if s._log == nil {
@@ -112,6 +120,16 @@ func (s *Server) run() error {
 }
 
 func (s *Server) handleClient(conn net.Conn) {
+	var span sessiontrace.Session
+	if s.tracer != nil {
+		span = s.tracer.NewSession(context.Background(), sessiontrace.SessionMeta{
+			Protocol: sessiontrace.ProtocolPolicy,
+			Remote:   conn.RemoteAddr().String(),
+			Local:    conn.LocalAddr().String(),
+		})
+		span.Event("connect", nil)
+		defer span.End("disconnect", nil)
+	}
 	defer func(clientConn net.Conn) {
 		err := clientConn.Close()
 		if err != nil {
@@ -143,6 +161,9 @@ func (s *Server) handleClient(conn net.Conn) {
 
 	if err = scanner.Err(); err != nil {
 		s._log.Errorf("Error reading from client:%+v", err)
+		if span != nil {
+			span.Error("read", err, nil)
+		}
 		return
 	}
 
@@ -151,6 +172,13 @@ func (s *Server) handleClient(conn net.Conn) {
 	defer func() {
 		_, _ = conn.Write([]byte("action=" + action + "\n\n"))
 		s._log.Infof("policy check done, sender=%s, recipient=%s, action=%s\n", sender, recipient, action)
+		if span != nil {
+			span.Event("decision", map[string]any{
+				"sender":    sessiontrace.MaskEmail(sender),
+				"recipient": sessiontrace.MaskEmail(recipient),
+				"action":    action,
+			})
+		}
 	}()
 
 	if sender == "" {

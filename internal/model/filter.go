@@ -1,9 +1,6 @@
 package model
 
 import (
-	context "context"
-	"easymail/internal/database"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -206,19 +203,31 @@ func (r FilterRule) Convert2DRL() (drl string, err error) {
 }
 
 func GetFilterRules() (rules []FilterRule, err error) {
-	err = db.Model(&rules).Where("status=?", 1).Order("priority desc").Find(&rules).Error
+	d, err := getDB()
+	if err != nil {
+		return nil, err
+	}
+	err = d.Model(&rules).Where("status=?", 1).Order("priority desc").Find(&rules).Error
 	return
 }
 
 func GetLastTimeOfRule() (last time.Time, err error) {
+	d, err := getDB()
+	if err != nil {
+		return time.Time{}, err
+	}
 	// 从filter_rules表中，只选择出update_time，然后赋值last
-	err = db.Model(&FilterRule{}).Select("update_time").Where("status=?", 1).
+	err = d.Model(&FilterRule{}).Select("update_time").Where("status=?", 1).
 		Order("update_time desc").Limit(1).Scan(&last).Error
 	return
 }
 
 func GetFilterField(orderField, orderDir string, page, pageSize int) (total int64, fields []FilterField, err error) {
-	query := db.Model(&fields)
+	d, err := getDB()
+	if err != nil {
+		return 0, nil, err
+	}
+	query := d.Model(&fields)
 	query.Count(&total)
 
 	if orderField != "" && orderDir != "" {
@@ -233,20 +242,13 @@ func GetFilterField(orderField, orderDir string, page, pageSize int) (total int6
 }
 
 func GetFilterMetricByStage(stage FilterStage) (metrics []FilterMetric, err error) {
+	d, err := getDB()
+	if err != nil {
+		return nil, err
+	}
 	metrics = make([]FilterMetric, 0)
 
-	// query cache first
-	rdb := database.GetRedisClient()
-	key := fmt.Sprintf("filter_metric_%d", stage)
-
-	ctx := context.Background()
-	cache, err := rdb.Get(ctx, key).Result()
-	if err == nil {
-		err = json.Unmarshal([]byte(cache), &metrics)
-		return metrics, err
-	}
-
-	query := db.Model(&metrics).Preload("PrimaryField").Preload("SecondaryField").Where("filter_metrics.status=?", 1)
+	query := d.Model(&metrics).Preload("PrimaryField").Preload("SecondaryField").Where("filter_metrics.status=?", 1)
 	query = query.Joins("left join filter_fields on (filter_fields.id = filter_metrics.primary_field_id OR filter_fields.id = filter_metrics.secondary_field_id)").
 		Where("filter_fields.stage=?", stage).
 		Where("filter_fields.status=?", 1).
@@ -255,16 +257,16 @@ func GetFilterMetricByStage(stage FilterStage) (metrics []FilterMetric, err erro
 	if err != nil {
 		return nil, err
 	}
-	// cache
-	if d, err := json.Marshal(metrics); err == nil {
-		_ = rdb.Set(ctx, key, d, time.Minute*5).Err()
-	}
 	return
 }
 
 func GetFilterMetric(req IndexFilterMetricRequest) (total int64, data []IndexFilterMetricResponse, err error) {
+	d, err := getDB()
+	if err != nil {
+		return 0, nil, err
+	}
 	metrics := make([]FilterMetric, 0)
-	query := db.Model(&metrics)
+	query := d.Model(&metrics)
 	query.Count(&total)
 
 	if req.OrderField != "" && req.OrderDir != "" {
@@ -309,20 +311,32 @@ func GetFilterMetric(req IndexFilterMetricRequest) (total int64, data []IndexFil
 }
 
 func GetFilterMetricByID(id int64) (metric FilterMetric, err error) {
-	err = db.Model(&metric).Where("id=?", id).First(&metric).Error
+	d, err := getDB()
+	if err != nil {
+		return FilterMetric{}, err
+	}
+	err = d.Model(&metric).Where("id=?", id).First(&metric).Error
 	return
 }
 
 func GetAllFilterField() (fields []FilterField, err error) {
-	err = db.Model(&fields).Where("status=?", 1).Where("can_metric=?", 1).Order("name asc").Find(&fields).Error
+	d, err := getDB()
+	if err != nil {
+		return nil, err
+	}
+	err = d.Model(&fields).Where("status=?", 1).Where("can_metric=?", 1).Order("name asc").Find(&fields).Error
 	return
 }
 
 func CreateFilterMetric(req CreateFilterMetricRequest) error {
+	d, err := getDB()
+	if err != nil {
+		return err
+	}
 	var metric FilterMetric
 	// req.ID>0 means update
 	if req.ID > 0 {
-		err := db.Model(&metric).Where("id=?", req.ID).First(&metric).Error
+		err := d.Model(&metric).Where("id=?", req.ID).First(&metric).Error
 		if err != nil && metric.ID == 0 {
 			return errors.New("metric not exists")
 		}
@@ -336,15 +350,13 @@ func CreateFilterMetric(req CreateFilterMetricRequest) error {
 		metric.Category = req.Category
 		metric.Unit = req.Unit
 		metric.Interval = req.Interval
-		return db.Model(&metric).Where("id=?", req.ID).Updates(metric).Error
+		return d.Model(&metric).Where("id=?", req.ID).Updates(metric).Error
 	}
 
-	err := db.Model(&metric).Where("name=?", req.Name).First(&metric).Error
+	err = d.Model(&metric).Where("name=?", req.Name).First(&metric).Error
 	if err == nil && metric.ID > 0 {
 		return errors.New("metric name already exists")
 	}
-
-	refreshFilterMetricCache()
 
 	metric.Name = req.Name
 	metric.Description = req.Description
@@ -359,12 +371,16 @@ func CreateFilterMetric(req CreateFilterMetricRequest) error {
 	metric.Unit = req.Unit
 	metric.Interval = req.Interval
 
-	return db.Model(&metric).Create(&metric).Error
+	return d.Model(&metric).Create(&metric).Error
 }
 
 func ToggleFilterMetric(id int64) error {
+	d, err := getDB()
+	if err != nil {
+		return err
+	}
 	var metric FilterMetric
-	err := db.Model(&metric).Where("id=?", id).First(&metric).Error
+	err = d.Model(&metric).Where("id=?", id).First(&metric).Error
 	if err != nil && metric.ID == 0 {
 		return errors.New("metric not exists")
 	}
@@ -375,44 +391,39 @@ func ToggleFilterMetric(id int64) error {
 	} else {
 		return errors.New("metric status error")
 	}
-	refreshFilterMetricCache()
-	return db.Model(&metric).Where("id=?", id).Updates(map[string]interface{}{
+	return d.Model(&metric).Where("id=?", id).Updates(map[string]interface{}{
 		"status":      metric.Status,
 		"update_time": time.Now(),
 	}).Error
 }
 
 func DeleteFilterMetric(id int64) error {
+	d, err := getDB()
+	if err != nil {
+		return err
+	}
 	var metric FilterMetric
-	err := db.Model(&metric).Where("id=?", id).First(&metric).Error
+	err = d.Model(&metric).Where("id=?", id).First(&metric).Error
 	if err != nil && metric.ID == 0 {
 		return errors.New("metric not exists")
 	}
-	refreshFilterMetricCache()
 
-	return db.Model(&metric).Where("id=?", id).Updates(FilterMetric{
+	return d.Model(&metric).Where("id=?", id).Updates(FilterMetric{
 		Status:     2,
 		DeleteTime: time.Now(),
 	}).Error
 }
 
-func refreshFilterMetricCache() {
-	rdb := database.GetRedisClient()
-	// range FilterStage
-	for i := 0; i <= 5; i++ {
-		key := fmt.Sprintf("filter_metric_%d", i)
-		rdb.Del(context.Background(), key)
-	}
-}
-
 func EditFilterMetric(req CreateFilterMetricRequest) error {
+	d, err := getDB()
+	if err != nil {
+		return err
+	}
 	var metric FilterMetric
-	err := db.Model(&metric).Where("id=?", req.ID).First(&metric).Error
+	err = d.Model(&metric).Where("id=?", req.ID).First(&metric).Error
 	if err != nil && metric.ID == 0 {
 		return errors.New("metric not exists")
 	}
-
-	refreshFilterMetricCache()
 
 	metric.Name = req.Name
 	metric.Description = req.Description
@@ -423,32 +434,18 @@ func EditFilterMetric(req CreateFilterMetricRequest) error {
 	metric.Unit = req.Unit
 	metric.Interval = req.Interval
 	metric.UpdateTime = time.Now()
-	return db.Save(&metric).Error
+	return d.Save(&metric).Error
 
 }
 
 func GetFilterFieldByStage(stage FilterStage) ([]FilterField, error) {
+	d, err := getDB()
+	if err != nil {
+		return nil, err
+	}
 	var fields []FilterField
 
-	// query cache first
-	rdb := database.GetRedisClient()
-	key := fmt.Sprintf("filter_field_%d", stage)
-
-	ctx := context.Background()
-	cache, err := rdb.Get(ctx, key).Result()
-	if err == nil {
-		err = json.Unmarshal([]byte(cache), &fields)
-		return fields, err
-	}
-
-	err = db.Model(&fields).Where("status=? AND stage=?", 1, stage).Order("name asc").Find(&fields).Error
-	if err == nil {
-		// cache
-		cache, err := json.Marshal(fields)
-		if err == nil {
-			rdb.Set(ctx, key, cache, time.Duration(1)*time.Hour)
-		}
-	}
+	err = d.Model(&fields).Where("status=? AND stage=?", 1, stage).Order("name asc").Find(&fields).Error
 	return fields, err
 }
 

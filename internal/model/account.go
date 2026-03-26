@@ -74,6 +74,10 @@ func Authorize(username, password string) (acc *Account, err error) {
 }
 
 func CreateAccount(req CreateAccountRequest) (err error) {
+	d, err := getDB()
+	if err != nil {
+		return err
+	}
 	domain, err := FindDomainByID(req.DomainID)
 	if err != nil || domain == nil || domain.ID <= 0 {
 		return errors.New("domain not exists")
@@ -98,7 +102,7 @@ func CreateAccount(req CreateAccountRequest) (err error) {
 		StorageQuota:       req.StorageQuota,
 		PasswordExpireTime: req.PasswordExpiredTime,
 	}
-	if err := db.Create(account).Error; err != nil {
+	if err := d.Create(account).Error; err != nil {
 		return err
 	}
 
@@ -111,7 +115,11 @@ FindAccountByID
 Find an model by id.
 */
 func FindAccountByID(id int64) (a *Account, err error) {
-	err = db.Model(&a).Where("id= ?", id).Scan(&a).Error
+	d, err := getDB()
+	if err != nil {
+		return nil, err
+	}
+	err = d.Model(&a).Where("id= ?", id).Scan(&a).Error
 	if err != nil {
 		return a, err
 	}
@@ -123,8 +131,12 @@ func ValidateAccount(acc Account) bool {
 }
 
 func GetAccountByID(i int) (*Account, error) {
+	d, err := getDB()
+	if err != nil {
+		return nil, err
+	}
 	var acc Account
-	err := db.First(&acc, i).Error
+	err = d.First(&acc, i).Error
 	return &acc, err
 }
 
@@ -135,6 +147,10 @@ Find an model by username with the given domain.
 if domain is not exist, use default domain.
 */
 func FindAccountByName(username string) (a *Account, err error) {
+	d, err := getDB()
+	if err != nil {
+		return nil, err
+	}
 	if !emailRegex.MatchString(username) {
 		return nil, errors.New("invalid username")
 	}
@@ -151,7 +167,7 @@ func FindAccountByName(username string) (a *Account, err error) {
 	}
 
 	a = &Account{}
-	err = db.Model(&a).Where("username=? AND domain_id=? AND active=? AND deleted=?", parts[0], domain.ID, true, false).Take(&a).Error
+	err = d.Model(&a).Where("username=? AND domain_id=? AND active=? AND deleted=?", parts[0], domain.ID, true, false).Take(&a).Error
 	if err == gorm.ErrRecordNotFound {
 		return nil, errors.New("model not exists")
 	}
@@ -160,13 +176,21 @@ func FindAccountByName(username string) (a *Account, err error) {
 }
 
 func CountDomainAccount(id int64) (total int64, err error) {
-	err = db.Model(&Account{}).Where("domain_id=?", id).Count(&total).Error
+	d, err := getDB()
+	if err != nil {
+		return 0, err
+	}
+	err = d.Model(&Account{}).Where("domain_id=?", id).Count(&total).Error
 	return total, err
 }
 
 func Index(did, status int, keyword, orderField, orderDir string, page, pageSize int) (int64, []Account, error) {
+	d, err := getDB()
+	if err != nil {
+		return 0, nil, err
+	}
 	accounts := make([]Account, 0)
-	query := db.Model(&accounts).Where("domain_id=?", did)
+	query := d.Model(&accounts).Where("domain_id=?", did)
 	if keyword != "" {
 		query = query.Where("name LIKE ?", "%"+keyword+"%")
 	}
@@ -187,7 +211,7 @@ func Index(did, status int, keyword, orderField, orderDir string, page, pageSize
 		query = query.Order(fmt.Sprintf("%s %s", orderField, orderDir))
 	}
 	query = query.Offset(page).Limit(pageSize)
-	err := query.Find(&accounts).Error
+	err = query.Find(&accounts).Error
 	if err != nil {
 		return 0, nil, err
 	}
@@ -195,37 +219,57 @@ func Index(did, status int, keyword, orderField, orderDir string, page, pageSize
 }
 
 func ToggleAccount(id int64) error {
-	account := Account{}
-	if err := db.First(&account, id).Error; err != nil {
+	d, err := getDB()
+	if err != nil {
 		return err
 	}
-	if err := db.Model(&account).Where("id", id).Update("active", !account.Active).Error; err != nil {
+	account := Account{}
+	if err := d.First(&account, id).Error; err != nil {
+		return err
+	}
+	if err := d.Model(&account).Where("id", id).Update("active", !account.Active).Error; err != nil {
 		return err
 	}
 	return nil
 }
 
 func SaveEmail(email *Email) (err error) {
+	d, err := getDB()
+	if err != nil {
+		return err
+	}
 	// check account_id, jobid, identity must exist
 	if email.AccountID <= 0 || email.JobID == "" || email.Identity == "" {
 		return errors.New("invalid email")
 	}
-	return db.Model(&email).Create(email).Error
+	return d.Model(&email).Create(email).Error
 }
 
 func DeleteMail(accID int64, mailID int64) error {
-	return db.Model(&Email{}).Where("account_id = ? AND id = ?", accID, mailID).Updates(
+	d, err := getDB()
+	if err != nil {
+		return err
+	}
+	return d.Model(&Email{}).Where("account_id = ? AND id = ?", accID, mailID).Updates(
 		map[string]interface{}{"Deleted": true, "DeleteTime": time.Now()},
 	).Error
 }
 
 func MoveMail(accID int64, mailID int64, fid FolderID) error {
-	return db.Model(&Email{}).Where("account_id = ? AND id = ?", accID, mailID).Update("folder_id", fid).Error
+	d, err := getDB()
+	if err != nil {
+		return err
+	}
+	return d.Model(&Email{}).Where("account_id = ? AND id = ?", accID, mailID).Update("folder_id", fid).Error
 }
 
 func DeleteAccount(id int64) (err error) {
+	d, err := getDB()
+	if err != nil {
+		return err
+	}
 	// transmit
-	tx := db.Begin()
+	tx := d.Begin()
 
 	// mark mails deleted
 	err = tx.Model(&Email{}).Where("account_id = ?", id).Updates(
@@ -252,7 +296,11 @@ func DeleteAccount(id int64) (err error) {
 }
 
 func EditAccount(req EditAccountRequest) error {
-	tx := db.Begin()
+	d, err := getDB()
+	if err != nil {
+		return err
+	}
+	tx := d.Begin()
 	if len(req.Password) >= 6 && len(req.Password) <= 64 {
 		hashPassword, err := GeneratePassword(req.Password)
 		if err != nil {

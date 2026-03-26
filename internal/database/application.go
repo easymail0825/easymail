@@ -18,7 +18,23 @@ type AppConfig struct {
 	Mysql   string `yaml:"mysql"`
 	Redis   string `yaml:"redis"`
 	LogFile string `yaml:"log_file"`
-	Apps    []App  `yaml:"apps"`
+
+	InitDB bool `yaml:"init_db"`
+
+	Observability ObservabilityConfig `yaml:"observability"`
+
+	Apps []App `yaml:"apps"`
+}
+
+type ObservabilityConfig struct {
+	SessionTrace SessionTraceConfig `yaml:"session_trace"`
+}
+
+type SessionTraceConfig struct {
+	Enabled   bool   `yaml:"enabled"`
+	Sink      string `yaml:"sink"` // file|db
+	FilePath  string `yaml:"file_path"`
+	QueueSize int    `yaml:"queue_size"`
 }
 
 func ReadAppConfig(filename string) (*AppConfig, error) {

@@ -72,15 +72,20 @@ func QueryRegion(ip net.IP) (country, province, city string, err error) {
 	keyCity := fmt.Sprintf("%s:%s:%s", ip, "region", "city")
 
 	// get from redis first
-	if country, err = rdb.Get(ctx, keyCountry).Result(); err == nil {
-		if province, err = rdb.Get(ctx, keyProvince).Result(); err == nil {
-			if city, err = rdb.Get(ctx, keyCity).Result(); err == nil {
-				return country, province, city, nil
+	if rdb != nil {
+		if country, err = rdb.Get(ctx, keyCountry).Result(); err == nil {
+			if province, err = rdb.Get(ctx, keyProvince).Result(); err == nil {
+				if city, err = rdb.Get(ctx, keyCity).Result(); err == nil {
+					return country, province, city, nil
+				}
 			}
 		}
 	}
 
 	// Get bodyData of IP.
+	if geoip == nil {
+		return "", "", "", fmt.Errorf("geoip database not initialized")
+	}
 	anyData := make(map[string]any)
 	_, ok, err := geoip.LookupNetwork(ip, &anyData)
 	if err != nil {

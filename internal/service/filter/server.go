@@ -4,6 +4,7 @@ import (
 	"context"
 	"easymail/internal/easylog"
 	"easymail/internal/model"
+	"easymail/internal/observability/sessiontrace"
 	"easymail/internal/preprocessing"
 	"easymail/internal/service/milter"
 	"fmt"
@@ -271,6 +272,7 @@ type Server struct {
 	html2text *preprocessing.Html2Text
 
 	filter *Filter
+	tracer sessiontrace.Tracer
 }
 
 func New(family string, listen string, _log *easylog.Logger) (server *Server) {
@@ -304,9 +306,16 @@ func (s *Server) SetLogger(_log *easylog.Logger) error {
 	return nil
 }
 
+func (s *Server) SetTracer(t sessiontrace.Tracer) {
+	s.tracer = t
+}
+
 func (s *Server) Start() error {
 	if s._log == nil {
 		return fmt.Errorf("%s logger is nil", s.name)
+	}
+	if err := Initialize(); err != nil {
+		return err
 	}
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -331,6 +340,7 @@ func (s *Server) Stop() error {
 
 	s.started = false
 	close(s.stopCh)
+	Shutdown()
 	s._log.Infof("%s server stopped!", s.name)
 	return nil
 }
@@ -351,6 +361,7 @@ func (s *Server) run() (err error) {
 			return err
 		}
 		session := NewSession(client, s.filter, s._log, s.html2text)
+		session.SetTracer(s.tracer)
 		go session.Handle()
 	}
 }

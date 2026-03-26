@@ -62,9 +62,11 @@ func (r *Resolver) DomainExist(domain string) (bool, error) {
 	//query cache first
 	rdb := database.GetRedisClient()
 	key := fmt.Sprintf("dns:domain:%s", domain)
-	value, err := rdb.Get(context.Background(), key).Result()
-	if err == nil {
-		return value == "true", nil
+	if rdb != nil {
+		value, err := rdb.Get(context.Background(), key).Result()
+		if err == nil {
+			return value == "true", nil
+		}
 	}
 
 	c := new(dns.Client)
@@ -81,7 +83,9 @@ func (r *Resolver) DomainExist(domain string) (bool, error) {
 	}
 
 	// save cache
-	rdb.Set(context.Background(), key, "true", ExpireTime)
+	if rdb != nil {
+		rdb.Set(context.Background(), key, "true", ExpireTime)
+	}
 	return true, nil
 }
 
@@ -93,9 +97,11 @@ func (r *Resolver) LookupIPAddr(domain string) (data []string, err error) {
 	//query cache first
 	rdb := database.GetRedisClient()
 	key := fmt.Sprintf("dns:ip:%s", domain)
-	value, err := rdb.Get(context.Background(), key).Result()
-	if err == nil {
-		return strings.Split(value, ","), nil
+	if rdb != nil {
+		value, err := rdb.Get(context.Background(), key).Result()
+		if err == nil {
+			return strings.Split(value, ","), nil
+		}
 	}
 
 	c := new(dns.Client)
@@ -118,7 +124,9 @@ func (r *Resolver) LookupIPAddr(domain string) (data []string, err error) {
 	}
 
 	// save cache
-	rdb.Set(context.Background(), key, strings.Join(data, ","), ExpireTime)
+	if rdb != nil {
+		rdb.Set(context.Background(), key, strings.Join(data, ","), ExpireTime)
+	}
 
 	return data, nil
 
@@ -132,7 +140,12 @@ func (r *Resolver) LookupTXT(domain string) (data []string, err error) {
 	//query cache first
 	rdb := database.GetRedisClient()
 	key := fmt.Sprintf("dns:txt:%s", domain)
-	value, err := rdb.Get(context.Background(), key).Result()
+	var value string
+	if rdb == nil {
+		err = redis.Nil
+	} else {
+		value, err = rdb.Get(context.Background(), key).Result()
+	}
 	if errors.Is(err, redis.Nil) {
 		c := new(dns.Client)
 		m := new(dns.Msg)
@@ -178,13 +191,17 @@ func (r *Resolver) LookupTXT(domain string) (data []string, err error) {
 			}
 
 			// save cache
-			rdb.Set(context.Background(), key, strings.Join(data, ","), ExpireTime)
+			if rdb != nil {
+				rdb.Set(context.Background(), key, strings.Join(data, ","), ExpireTime)
+			}
 
 			return data, nil
 		}
 
 		// save cache
-		rdb.Set(context.Background(), key, strings.Join(data, ","), ExpireTime)
+		if rdb != nil {
+			rdb.Set(context.Background(), key, strings.Join(data, ","), ExpireTime)
+		}
 
 		return data, nil
 	}
@@ -199,9 +216,11 @@ func (r *Resolver) LookupPtr(ip string) (data []string, err error) {
 	//query cache first
 	rdb := database.GetRedisClient()
 	key := fmt.Sprintf("dns:ptr:%s", ip)
-	value, err := rdb.Get(context.Background(), key).Result()
-	if err == nil {
-		return strings.Split(value, ","), nil
+	if rdb != nil {
+		value, err := rdb.Get(context.Background(), key).Result()
+		if err == nil {
+			return strings.Split(value, ","), nil
+		}
 	}
 
 	c := new(dns.Client)
@@ -224,7 +243,9 @@ func (r *Resolver) LookupPtr(ip string) (data []string, err error) {
 	}
 
 	// save cache
-	rdb.Set(context.Background(), key, strings.Join(data, ","), ExpireTime)
+	if rdb != nil {
+		rdb.Set(context.Background(), key, strings.Join(data, ","), ExpireTime)
+	}
 
 	return data, nil
 }
@@ -237,9 +258,11 @@ func (r *Resolver) LookupMX(domain string) (data []string, err error) {
 	// query cache first
 	rdb := database.GetRedisClient()
 	key := fmt.Sprintf("dns:mx:%s", domain)
-	value, err := rdb.Get(context.Background(), key).Result()
-	if err == nil {
-		return strings.Split(value, ","), nil
+	if rdb != nil {
+		value, err := rdb.Get(context.Background(), key).Result()
+		if err == nil {
+			return strings.Split(value, ","), nil
+		}
 	}
 
 	c := new(dns.Client)
@@ -262,7 +285,9 @@ func (r *Resolver) LookupMX(domain string) (data []string, err error) {
 	}
 
 	// save cache
-	rdb.Set(context.Background(), key, strings.Join(data, ","), ExpireTime)
+	if rdb != nil {
+		rdb.Set(context.Background(), key, strings.Join(data, ","), ExpireTime)
+	}
 
 	return data, nil
 }
@@ -275,9 +300,11 @@ func (r *Resolver) LookupSPF(domain string) (record string, err error) {
 	// query cache first
 	rdb := database.GetRedisClient()
 	key := fmt.Sprintf("dns:spf:%s", domain)
-	value, err := rdb.Get(context.Background(), key).Result()
-	if err == nil {
-		return value, nil
+	if rdb != nil {
+		value, err := rdb.Get(context.Background(), key).Result()
+		if err == nil {
+			return value, nil
+		}
 	}
 
 	c := new(dns.Client)
@@ -315,7 +342,9 @@ func (r *Resolver) LookupSPF(domain string) (record string, err error) {
 	}
 
 	// save cache
-	rdb.Set(context.Background(), key, record, ExpireTime)
+	if rdb != nil {
+		rdb.Set(context.Background(), key, record, ExpireTime)
+	}
 
 	return record, nil
 }
@@ -328,9 +357,11 @@ func (r *Resolver) LookupDKIM(domain, selector string) (data []string, err error
 	// query cache first
 	rdb := database.GetRedisClient()
 	key := fmt.Sprintf("dns:dkim:%s", domain)
-	value, err := rdb.Get(context.Background(), key).Result()
-	if err == nil {
-		return strings.Split(value, ","), nil
+	if rdb != nil {
+		value, err := rdb.Get(context.Background(), key).Result()
+		if err == nil {
+			return strings.Split(value, ","), nil
+		}
 	}
 
 	domain = fmt.Sprintf("%s._domainkey.%s", selector, domain)
@@ -356,7 +387,9 @@ func (r *Resolver) LookupDKIM(domain, selector string) (data []string, err error
 	}
 
 	// save cache
-	rdb.Set(context.Background(), key, strings.Join(data, ","), ExpireTime)
+	if rdb != nil {
+		rdb.Set(context.Background(), key, strings.Join(data, ","), ExpireTime)
+	}
 
 	return data, nil
 }
@@ -369,9 +402,11 @@ func (r *Resolver) LookupDMARC(domain string) (data []string, err error) {
 	// query cache first
 	rdb := database.GetRedisClient()
 	key := fmt.Sprintf("dns:dmarc:%s", domain)
-	value, err := rdb.Get(context.Background(), key).Result()
-	if err == nil {
-		return strings.Split(value, ","), nil
+	if rdb != nil {
+		value, err := rdb.Get(context.Background(), key).Result()
+		if err == nil {
+			return strings.Split(value, ","), nil
+		}
 	}
 	domain = fmt.Sprintf("_dmarc.%s", domain)
 	c := new(dns.Client)
@@ -396,7 +431,9 @@ func (r *Resolver) LookupDMARC(domain string) (data []string, err error) {
 	}
 
 	// save cache
-	rdb.Set(context.Background(), key, strings.Join(data, ","), ExpireTime)
+	if rdb != nil {
+		rdb.Set(context.Background(), key, strings.Join(data, ","), ExpireTime)
+	}
 
 	return data, nil
 }

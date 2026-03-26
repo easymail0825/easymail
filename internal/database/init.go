@@ -24,7 +24,3 @@ func Initialize(configPath string) error {
 	})
 	return initErr
 }
-
-func init() {
-	_ = Initialize("easymail.yaml")
-}

@@ -1,9 +1,6 @@
 package model
 
-import (
-	"easymail/internal/database"
-	"time"
-)
+import "time"
 
 type SsdeepHash struct {
 	ID         int64     `gorm:"primaryKey;AUTO_INCREMENT" json:"id"`
@@ -15,11 +12,14 @@ type SsdeepHash struct {
 }
 
 func CreateSsdeepHash(hash string, sessionID string, chunkSize int, isAttach bool) (*SsdeepHash, error) {
-	db := database.GetDB()
+	d, err := getDB()
+	if err != nil {
+		return nil, err
+	}
 
 	// check if hash exists
 	var h SsdeepHash
-	err := db.Where("hash = ?", hash).First(&h).Error
+	err = d.Where("hash = ?", hash).First(&h).Error
 	if err == nil {
 		return &h, nil
 	}
@@ -31,7 +31,7 @@ func CreateSsdeepHash(hash string, sessionID string, chunkSize int, isAttach boo
 		CreateTime: time.Now(),
 	}
 
-	err = db.Create(&h).Error
+	err = d.Create(&h).Error
 
 	return &h, err
 }

@@ -6,6 +6,7 @@ import (
 	"context"
 	"easymail/internal/easylog"
 	"easymail/internal/identity"
+	"easymail/internal/observability/sessiontrace"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -32,6 +33,8 @@ type Server struct {
 
 	// atomic counter for cuid
 	count int64
+
+	tracer sessiontrace.Tracer
 }
 
 var identityService = identity.NewService()
@@ -71,6 +74,10 @@ func (s *Server) SetLogger(_log *easylog.Logger) error {
 	}
 	s._log = _log
 	return nil
+}
+
+func (s *Server) SetTracer(t sessiontrace.Tracer) {
+	s.tracer = t
 }
 
 func (s *Server) Start() error {
@@ -134,6 +141,16 @@ func (s *Server) Handle(conn net.Conn) (err error) {
 	if s.debug {
 		s._log.Debugf("new client connected, from %s\n", conn.RemoteAddr().String())
 	}
+	var span sessiontrace.Session
+	if s.tracer != nil {
+		span = s.tracer.NewSession(context.Background(), sessiontrace.SessionMeta{
+			Protocol: sessiontrace.ProtocolAuth,
+			Remote:   conn.RemoteAddr().String(),
+			Local:    conn.LocalAddr().String(),
+		})
+		span.Event("connect", nil)
+		defer span.End("disconnect", nil)
+	}
 	defer func(conn net.Conn) {
 		err = conn.Close()
 		if err != nil {
@@ -175,7 +192,15 @@ func (s *Server) Handle(conn net.Conn) (err error) {
 	}
 
 	if !sess.handshakeOk {
+		if span != nil {
+			span.Event("handshake_failed", nil)
+		}
 		return errors.New(fmt.Sprintf("handshake failed"))
+	}
+	if span != nil {
+		span.Event("handshake_ok", map[string]any{
+			"cpid": sess.cpid,
+		})
 	}
 
 	// step 2: response handshake, must keep this order
@@ -264,6 +289,12 @@ func (s *Server) Handle(conn net.Conn) (err error) {
 		}
 		sess.username = string(authPair[1])
 		password := string(authPair[2])
+		if span != nil {
+			span.Event("auth_attempt", map[string]any{
+				"user": sessiontrace.MaskEmail(sess.username),
+				"service": param["service"],
+			})
+		}
 
 		// authorize username with the password
 		_, err = identityService.Authenticate(context.Background(), sess.username, password)
@@ -273,6 +304,13 @@ func (s *Server) Handle(conn net.Conn) (err error) {
 				s._log.Info("invalid username or password:", sess.username)
 			}
 			_ = sess.sendData(false, data)
+			if span != nil {
+				span.Event("auth_result", map[string]any{
+					"user":   sessiontrace.MaskEmail(sess.username),
+					"ok":     false,
+					"reason": "invalid_credentials",
+				})
+			}
 			continue
 		}
 
@@ -282,6 +320,12 @@ func (s *Server) Handle(conn net.Conn) (err error) {
 		data["user"] = sess.username
 		_ = sess.sendData(true, data)
 		s._log.Info("authorized:", sess.username)
+		if span != nil {
+			span.Event("auth_result", map[string]any{
+				"user": sessiontrace.MaskEmail(sess.username),
+				"ok":   true,
+			})
+		}
 	}
 	return nil
 }

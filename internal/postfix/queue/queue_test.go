@@ -1,13 +1,21 @@
 package queue
 
 import (
+	"easymail/internal/database"
 	"fmt"
 	"log"
 	"os/exec"
+	"runtime"
 	"testing"
 )
 
 func TestDump(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("requires postfix environment")
+	}
+	if database.GetDB() == nil {
+		t.Skip("database not initialized")
+	}
 	/*
 		out = []byte(`{"queue_name": "active", "queue_id": "09EAF4422BA", "arrival_time": 1713849287, "message_size": 688, "forced_expire": false, "sender": "admin@super.com", "recipients": [{"address": "admin@super.com"}]}
 			{"queue_name": "active", "queue_id": "BC2624422BB", "arrival_time": 1713849287, "message_size": 688, "forced_expire": false, "sender": "admin@super.com", "recipients": [{"address": "admin@super.com"}]}
@@ -26,6 +34,9 @@ func TestDump(t *testing.T) {
 }
 
 func TestCmd(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("requires sudo/postcat")
+	}
 	cmd := exec.Command("sudo", "/usr/sbin/postcat", "-qh", "581284422BB")
 	out, err := cmd.CombinedOutput()
 	if err != nil {

@@ -13,12 +13,10 @@
 
 ## Boot Entry
 
-- New entry: `cmd/easymailv2/main.go`
-- Legacy entry remains available for rollback: `cmd/easymail/main.go`
-- Production switch target is `easymailv2`; legacy entry is rollback-only after cutover approval.
+- Default entry: `cmd/easymail/main.go` (bootstrap/runtime)
 
 ## Migration Rule
 
 - Existing behavior is preserved by adapters first.
-- New business logic must be added in module packages, not legacy controllers/models directly.
+- New business logic must be added in module packages, not old controllers/models directly.
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"github.com/jhillyerd/enmime"
 	"golang.org/x/crypto/bcrypt"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -23,8 +24,11 @@ func TestCompare(t *testing.T) {
 }
 
 func TestMigrate(t *testing.T) {
-	var err error
-	if err = db.AutoMigrate(&SsdeepHash{}); err != nil {
+	d, err := getDB()
+	if err != nil {
+		t.Skip(err)
+	}
+	if err = d.AutoMigrate(&SsdeepHash{}); err != nil {
 		t.Fail()
 	}
 
@@ -166,6 +170,9 @@ func TestMigrate(t *testing.T) {
 }
 
 func TestCreateDomain(t *testing.T) {
+	if _, err := getDB(); err != nil {
+		t.Skip(err)
+	}
 	req := CreateDomainRequest{
 		Name:        "super.com",
 		Description: "test domain",
@@ -178,6 +185,9 @@ func TestCreateDomain(t *testing.T) {
 }
 
 func TestCreateAccount(t *testing.T) {
+	if _, err := getDB(); err != nil {
+		t.Skip(err)
+	}
 	req := CreateAccountRequest{
 		Name:                "admin",
 		Password:            "123456",
@@ -191,6 +201,10 @@ func TestCreateAccount(t *testing.T) {
 }
 
 func TestAuthAccount(t *testing.T) {
+	d, err := getDB()
+	if err != nil {
+		t.Skip(err)
+	}
 	acc, err := GetAccountByID(1)
 	if err != nil {
 		t.Fatal(err)
@@ -199,7 +213,7 @@ func TestAuthAccount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	db.Save(&acc)
+	d.Save(&acc)
 
 	_, err = Authorize("root@localhost", "123456")
 	//_, err := Authorize("admin@super.com", "admin")
@@ -210,6 +224,9 @@ func TestAuthAccount(t *testing.T) {
 }
 
 func TestGetDomain(t *testing.T) {
+	if _, err := getDB(); err != nil {
+		t.Skip(err)
+	}
 	domain, err := FindDomainByName("super.com")
 	if err != nil {
 		t.Fail()
@@ -218,6 +235,9 @@ func TestGetDomain(t *testing.T) {
 }
 
 func TestValidateAccount(t *testing.T) {
+	if _, err := getDB(); err != nil {
+		t.Skip(err)
+	}
 	acc, err := FindAccountByName("admin@super.com")
 	if err == nil {
 		v := ValidateAccount(*acc)
@@ -236,6 +256,9 @@ func TestGenerateRandomString(t *testing.T) {
 }
 
 func TestCreateEmail(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("requires unix file path")
+	}
 	mailer := "easymail 1.0.0"
 	html := "<p color='red'>hello world</p>"
 
@@ -261,8 +284,12 @@ func TestCreateEmail(t *testing.T) {
 }
 
 func TestRuleConvert(t *testing.T) {
+	d, err := getDB()
+	if err != nil {
+		t.Skip(err)
+	}
 	var rule FilterRule
-	err := db.Model(&rule).Where("id=?", 1).Scan(&rule).Error
+	err = d.Model(&rule).Where("id=?", 1).Scan(&rule).Error
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -25,7 +25,11 @@ type Domain struct {
 }
 
 func FindDomainByID(id int64) (domain *Domain, err error) {
-	err = db.Model(&domain).Where("id = ?", id).Scan(&domain).Error
+	d, err := getDB()
+	if err != nil {
+		return nil, err
+	}
+	err = d.Model(&domain).Where("id = ?", id).Scan(&domain).Error
 	if err == gorm.ErrRecordNotFound {
 		return domain, errors.New("domain not exists")
 	}
@@ -33,7 +37,11 @@ func FindDomainByID(id int64) (domain *Domain, err error) {
 }
 
 func FindDomainByName(name string) (domain *Domain, err error) {
-	err = db.Model(&domain).Where("name = ?", name).First(&domain).Error
+	d, err := getDB()
+	if err != nil {
+		return nil, err
+	}
+	err = d.Model(&domain).Where("name = ?", name).First(&domain).Error
 	if err == gorm.ErrRecordNotFound {
 		return nil, errors.New("domain not exists")
 	}
@@ -41,7 +49,11 @@ func FindDomainByName(name string) (domain *Domain, err error) {
 }
 
 func FindAllValidateDomain() (domains []Domain, err error) {
-	err = db.Model(&domains).Where("active=? AND deleted=?", true, false).Order("name").Scan(&domains).Error
+	d, err := getDB()
+	if err != nil {
+		return nil, err
+	}
+	err = d.Model(&domains).Where("active=? AND deleted=?", true, false).Order("name").Scan(&domains).Error
 	if err == gorm.ErrRecordNotFound {
 		return nil, errors.New("domain not exists")
 	}
@@ -49,7 +61,11 @@ func FindAllValidateDomain() (domains []Domain, err error) {
 }
 
 func FindValidateDomainByName(name string) (domain *Domain, err error) {
-	err = db.Model(&domain).Where("name = ? AND active=? AND deleted=?", name, true, false).Scan(&domain).Error
+	d, err := getDB()
+	if err != nil {
+		return nil, err
+	}
+	err = d.Model(&domain).Where("name = ? AND active=? AND deleted=?", name, true, false).Scan(&domain).Error
 	if err == gorm.ErrRecordNotFound {
 		return nil, errors.New("domain not exists")
 	}
@@ -57,6 +73,10 @@ func FindValidateDomainByName(name string) (domain *Domain, err error) {
 }
 
 func CreateDomain(req CreateDomainRequest) (err error) {
+	d, err := getDB()
+	if err != nil {
+		return err
+	}
 	if d, _ := FindDomainByName(req.Name); d != nil {
 		return errors.New("domain already exists")
 	}
@@ -68,7 +88,7 @@ func CreateDomain(req CreateDomainRequest) (err error) {
 		CreateTime:  time.Now(),
 		UpdateTime:  time.Now(),
 	}
-	if err := db.Create(domain).Error; err != nil {
+	if err := d.Create(domain).Error; err != nil {
 		return err
 	}
 
@@ -80,8 +100,12 @@ func ValidateDomain(domain Domain) bool {
 }
 
 func IndexDomain(keyword, orderField, orderDir string, page, pageSize int) (int64, []Domain, error) {
+	d, err := getDB()
+	if err != nil {
+		return 0, nil, err
+	}
 	domains := make([]Domain, 0)
-	query := db.Model(&domains)
+	query := d.Model(&domains)
 	if keyword != "" {
 		query = query.Where("name LIKE ?", "%"+keyword+"%")
 	}
@@ -93,7 +117,7 @@ func IndexDomain(keyword, orderField, orderDir string, page, pageSize int) (int6
 		query = query.Order(fmt.Sprintf("%s %s", orderField, orderDir))
 	}
 	query = query.Offset(page).Limit(pageSize)
-	err := query.Find(&domains).Error
+	err = query.Find(&domains).Error
 	if err != nil {
 		return 0, nil, err
 	}
@@ -101,11 +125,15 @@ func IndexDomain(keyword, orderField, orderDir string, page, pageSize int) (int6
 }
 
 func ToggleDomainActive(id int64) error {
-	domain := Domain{}
-	if err := db.First(&domain, id).Error; err != nil {
+	d, err := getDB()
+	if err != nil {
 		return err
 	}
-	if err := db.Model(&domain).Where("id", id).Updates(map[string]interface{}{
+	domain := Domain{}
+	if err := d.First(&domain, id).Error; err != nil {
+		return err
+	}
+	if err := d.Model(&domain).Where("id", id).Updates(map[string]interface{}{
 		"Active":     !domain.Active,
 		"UpdateTime": time.Now(),
 	}).Error; err != nil {
@@ -119,8 +147,12 @@ PhysicalDeleteDomain
 @Description: Physical delete the domain, include mails, model, but it will be deleted in background
 */
 func PhysicalDeleteDomain(id int64) (err error) {
+	d, err := getDB()
+	if err != nil {
+		return err
+	}
 	// transmit
-	tx := db.Begin()
+	tx := d.Begin()
 
 	// todo delete mails
 
@@ -148,12 +180,20 @@ func PhysicalDeleteDomain(id int64) (err error) {
 }
 
 func DeleteDomain(id int64) error {
-	return db.Model(&Domain{}).Where("id = ?", id).Updates(Domain{Deleted: true, UpdateTime: time.Now(), Active: false}).Error
+	d, err := getDB()
+	if err != nil {
+		return err
+	}
+	return d.Model(&Domain{}).Where("id = ?", id).Updates(Domain{Deleted: true, UpdateTime: time.Now(), Active: false}).Error
 }
 
 func LastUpdateDomain() time.Time {
+	gdb, err := getDB()
+	if err != nil {
+		return time.Time{}
+	}
 	d := Domain{}
-	err := db.Model(&d).Select("update_time").Order("update_time desc").First(&d).Error
+	err = gdb.Model(&d).Select("update_time").Order("update_time desc").First(&d).Error
 	if err == nil {
 		return d.UpdateTime
 	}

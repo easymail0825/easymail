@@ -5,7 +5,7 @@
 - Freeze all writes to old deployment branch.
 - Backup MySQL and storage data directory.
 - Export current `easymail.yaml` and postfix-related runtime config.
-- Verify new binary starts with `go run ./cmd/easymailv2`.
+- Verify new binary starts with `go run ./cmd/easymail`.
 
 ## 2. Validation Gates
 
@@ -19,7 +19,7 @@
 
 1. Stop old process.
 2. Apply migration scripts in `scripts/migration`.
-3. Start new process (`cmd/easymailv2`).
+3. Start new process (`cmd/easymail`).
 4. Validate:
    - admin login
    - webmail login
@@ -29,15 +29,7 @@
 6. Run smoke script:
    - `pwsh ./scripts/cutover/smoke.ps1`
 
-## 4. Rollback Procedure
-
-1. Stop new process.
-2. Restore DB snapshot and storage snapshot.
-3. Start old process (`cmd/easymail`).
-4. Re-run smoke checks.
-5. If rollback passes, keep legacy entrypoint `cmd/easymail/main.go` as active.
-
-## 5. Smoke Checklist
+## 4. Smoke Checklist
 
 - Admin routes work: `/login`, `/dashboard`, `/account/index`
 - Webmail routes work: `/login`, `/mailbox/`, `/mailbox/write`

@@ -4,11 +4,18 @@ import (
 	"github.com/google/uuid"
 	"github.com/jhillyerd/enmime"
 	"os"
+	"runtime"
 	"testing"
 )
 
 func TestReadMail(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("requires unix test fixture path")
+	}
 	fd, err := os.Open("/home/bobxiao/tmp/test.eml")
+	if err != nil {
+		t.Skip(err)
+	}
 	msg, err := enmime.ReadEnvelope(fd)
 	if err != nil {
 		t.Fatal(err)

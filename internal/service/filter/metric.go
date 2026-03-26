@@ -2,10 +2,14 @@ package filter
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
 
 func increaseCount(ctx context.Context, key string, expire time.Duration) (int64, error) {
+	if rdb == nil {
+		return 0, fmt.Errorf("redis client not initialized")
+	}
 	n, err := rdb.Incr(ctx, key).Result()
 	if err != nil {
 		if err == context.DeadlineExceeded {
@@ -21,6 +25,9 @@ func increaseCount(ctx context.Context, key string, expire time.Duration) (int64
 }
 
 func addSet(ctx context.Context, key string, value string, expire time.Duration) (n int64, err error) {
+	if rdb == nil {
+		return 0, fmt.Errorf("redis client not initialized")
+	}
 	_, err = rdb.SAdd(ctx, key, value).Result()
 	if err != nil {
 		if err == context.DeadlineExceeded {
@@ -40,6 +47,9 @@ func addSet(ctx context.Context, key string, value string, expire time.Duration)
 }
 
 func queryCacheInString(ctx context.Context, key string) (string, error) {
+	if rdb == nil {
+		return "", fmt.Errorf("redis client not initialized")
+	}
 	value, err := rdb.Get(ctx, key).Result()
 	if err != nil {
 		if err == context.DeadlineExceeded {
@@ -51,6 +61,9 @@ func queryCacheInString(ctx context.Context, key string) (string, error) {
 }
 
 func setCacheInString(ctx context.Context, key string, value string, expire time.Duration) error {
+	if rdb == nil {
+		return fmt.Errorf("redis client not initialized")
+	}
 	err := rdb.Set(ctx, key, value, expire).Err()
 	if err != nil {
 		return err

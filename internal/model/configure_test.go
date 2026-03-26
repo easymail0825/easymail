@@ -7,6 +7,9 @@ import (
 )
 
 func TestGetRootConfigureRootNodes(t *testing.T) {
+	if _, err := getDB(); err != nil {
+		t.Skip(err)
+	}
 	nodes, err := GetRootConfigureRootNodes()
 	if err != nil {
 		t.Fatal(err)
@@ -20,6 +23,9 @@ func TestGetRootConfigureRootNodes(t *testing.T) {
 }
 
 func TestAddConfigure(t *testing.T) {
+	if _, err := getDB(); err != nil {
+		t.Skip(err)
+	}
 	type ConfigureItem struct {
 		names       []string
 		value       string

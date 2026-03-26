@@ -68,14 +68,14 @@ func (a *AccountController) IndexDomain(c *gin.Context) {
 			// dns resolve
 
 			// mx
-			mxes, err := resolver.LookupMX(domain.Name)
+			mxes, err := getResolver().LookupMX(domain.Name)
 			mx := strings.Join(mxes, "<br>\n")
 
 			// spf
-			spf, _ := resolver.LookupSPF(domain.Name)
+			spf, _ := getResolver().LookupSPF(domain.Name)
 
 			// dmarc
-			dmarcs, _ := resolver.LookupDMARC(domain.Name)
+			dmarcs, _ := getResolver().LookupDMARC(domain.Name)
 			dmarc := strings.Join(dmarcs, "<br>\n")
 
 			data = append(data, model.IndexDomainResponse{

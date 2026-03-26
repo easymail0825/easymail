@@ -1,7 +1,6 @@
 package maillog
 
 import (
-	_ "easymail/internal/database"
 	"errors"
 	"fmt"
 	"regexp"
@@ -107,12 +106,20 @@ func Parse(line string) (mailLog *MailLog, err error) {
 }
 
 func Save(mailLog *MailLog) error {
-	return db.Model(mailLog).Create(mailLog).Error
+	d, err := getDB()
+	if err != nil {
+		return err
+	}
+	return d.Model(mailLog).Create(mailLog).Error
 }
 
 func Index(startTime, endTime time.Time, searchField int, keyword, orderField, orderDir string, page, pageSize int) (int64, []MailLog, error) {
+	d, err := getDB()
+	if err != nil {
+		return 0, nil, err
+	}
 	logs := make([]MailLog, 0)
-	query := db.Model(&logs)
+	query := d.Model(&logs)
 
 	if !startTime.IsZero() {
 		query = query.Where("log_time >=?", startTime)
@@ -144,7 +151,7 @@ func Index(startTime, endTime time.Time, searchField int, keyword, orderField, o
 		query = query.Order(fmt.Sprintf("%s %s", orderField, orderDir))
 	}
 	query = query.Offset(page).Limit(pageSize)
-	err := query.Find(&logs).Error
+	err = query.Find(&logs).Error
 	if err != nil {
 		return 0, nil, err
 	}

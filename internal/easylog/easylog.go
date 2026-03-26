@@ -47,7 +47,9 @@ const FORMAT_TIME_HOUR string = "2006010215"
 
 var _log *Logger = New()
 
-func init() {
+// InitializeDefaults sets default logging options for the global logger.
+// This is intentionally NOT executed at import time to keep package import side-effect free.
+func InitializeDefaults() {
 	SetFlags(Ldate | Ltime | Lshortfile)
 	SetHighlighting(runtime.GOOS != "windows")
 }

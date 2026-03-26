@@ -31,8 +31,12 @@ type Configure struct {
 }
 
 func GetConfigureByID(id uint) (*Configure, error) {
+	d, err := getDB()
+	if err != nil {
+		return nil, err
+	}
 	c := Configure{}
-	err := db.Model(&c).Where("id=?", id).Scan(&c).Error
+	err = d.Model(&c).Where("id=?", id).Scan(&c).Error
 	if err != nil {
 		return nil, err
 	}
@@ -40,9 +44,12 @@ func GetConfigureByID(id uint) (*Configure, error) {
 }
 
 func GetConfigureByName(name string, pid uint) (*Configure, error) {
+	d, err := getDB()
+	if err != nil {
+		return nil, err
+	}
 	c := Configure{}
-	var err error
-	query := db.Model(&c).Where("name = ?", name)
+	query := d.Model(&c).Where("name = ?", name)
 	if pid == 0 {
 		query = query.Where("parent_id = ? OR parent_id is NULL", 0)
 	} else {
@@ -56,12 +63,20 @@ func GetConfigureByName(name string, pid uint) (*Configure, error) {
 }
 
 func CreateRoot(name string) (err error) {
+	d, err := getDB()
+	if err != nil {
+		return err
+	}
 	now := time.Now()
-	return db.Exec("INSERT INTO `configures` (`name`, `value`, `data_type`, `parent_id`, `create_time`, `update_time`, `private`) "+
+	return d.Exec("INSERT INTO `configures` (`name`, `value`, `data_type`, `parent_id`, `create_time`, `update_time`, `private`) "+
 		"VALUES (?, ?, ?, ?, ?, ?, ?)", name, "", DataTypeChild, nil, now, now, true).Error
 }
 
 func CreateNode(parent *Configure, name string, value string, dataType DataType, description string) (*Configure, error) {
+	d, err := getDB()
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now()
 
 	c := &Configure{
@@ -75,7 +90,7 @@ func CreateNode(parent *Configure, name string, value string, dataType DataType,
 	c.CreateTime = now
 	c.UpdateTime = now
 
-	err := db.Create(&c).Error
+	err = d.Create(&c).Error
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +158,11 @@ func CreateConfigure(value, description string, dateType DataType, names ...stri
 }
 
 func UpdateConfigure(node Configure) error {
-	return db.Model(&node).Where("id=?", node.ID).Updates(Configure{
+	d, err := getDB()
+	if err != nil {
+		return err
+	}
+	return d.Model(&node).Where("id=?", node.ID).Updates(Configure{
 		Value:       node.Value,
 		Description: node.Description,
 		UpdateTime:  time.Now(),
@@ -151,16 +170,28 @@ func UpdateConfigure(node Configure) error {
 }
 
 func GetRootConfigureRootNodes() (data []Configure, err error) {
-	err = db.Model(&data).Where("parent_id = ? or parent_id is null", 0).Order("name").Find(&data).Error
+	d, err := getDB()
+	if err != nil {
+		return nil, err
+	}
+	err = d.Model(&data).Where("parent_id = ? or parent_id is null", 0).Order("name").Find(&data).Error
 	return
 }
 
 func GetSubConfigureByParentId(id uint) (data []Configure, err error) {
-	err = db.Model(&data).Where("parent_id = ?", id).Order("name").Find(&data).Error
+	d, err := getDB()
+	if err != nil {
+		return nil, err
+	}
+	err = d.Model(&data).Where("parent_id = ?", id).Order("name").Find(&data).Error
 	return
 }
 
 func GetConfigureByParentId(id, subNodeID uint, keyword, orderField, orderDir string, page, pageSize int) (total int64, nodes []Configure, err error) {
+	d, err := getDB()
+	if err != nil {
+		return 0, nil, err
+	}
 	// query subNodes first
 	subNodes, err := GetSubConfigureByParentId(id)
 	nodeMap := make(map[uint]*Configure)
@@ -181,7 +212,7 @@ func GetConfigureByParentId(id, subNodeID uint, keyword, orderField, orderDir st
 	}
 
 	// then query 3rd level node
-	query := db.Model(&nodes).Where("parent_id in (?)", ids)
+	query := d.Model(&nodes).Where("parent_id in (?)", ids)
 	if keyword != "" {
 		query = query.Where("name LIKE ?", "%"+keyword+"%")
 	}
@@ -205,5 +236,9 @@ func GetConfigureByParentId(id, subNodeID uint, keyword, orderField, orderDir st
 }
 
 func (c *Configure) Save() error {
-	return db.Save(c).Error
+	d, err := getDB()
+	if err != nil {
+		return err
+	}
+	return d.Save(c).Error
 }

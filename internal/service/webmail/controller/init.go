@@ -23,7 +23,12 @@ func getLocalStorage() (*storage.LocalStorage, error) {
 			localStorageErr = errors.New("easymail configure root is not defined")
 			return
 		}
-		localStorage = storage.NewLocalStorage(r.Value, c.Value)
+		db, err := model.DB()
+		if err != nil {
+			localStorageErr = err
+			return
+		}
+		localStorage = storage.NewLocalStorage(r.Value, c.Value, db)
 	})
 	if localStorageErr != nil {
 		return nil, localStorageErr

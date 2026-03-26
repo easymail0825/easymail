@@ -118,7 +118,7 @@ func (*FilterController) CreateMetric(c *gin.Context) {
 
 		// edit
 		if req.ID > 0 {
-			err := model.EditFilterMetric(req)
+			err = model.EditFilterMetric(req)
 			if err != nil {
 				c.JSON(http.StatusOK, gin.H{"error": "edit metric failed:" + err.Error()})
 				return
@@ -127,7 +127,7 @@ func (*FilterController) CreateMetric(c *gin.Context) {
 			return
 		}
 
-		err := model.CreateFilterMetric(req)
+		err = model.CreateFilterMetric(req)
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{"error": "create model failed:" + err.Error()})
 			return

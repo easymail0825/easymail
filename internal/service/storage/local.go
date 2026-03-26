@@ -13,6 +13,8 @@ import (
 	"regexp"
 	"sync"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 // LocalStorage is a Storager implementation that saves files locally.
@@ -21,16 +23,20 @@ type LocalStorage struct {
 	AppRoot string
 	BaseDir string
 	lock    sync.Mutex
+	db      *gorm.DB
 }
 
 func (s *LocalStorage) Query(accID, folderID int64, orderField, orderDir string, page, pageSize int) (total, news int64, emails []model.Email, err error) {
+	if s.db == nil {
+		return 0, 0, nil, errors.New("database not initialized")
+	}
 	emails = make([]model.Email, 0)
-	query := db.Model(&emails).Where("account_id = ?", accID).Where("folder_id = ?", folderID)
+	query := s.db.Model(&emails).Where("account_id = ?", accID).Where("folder_id = ?", folderID)
 	err = query.Count(&total).Error
 	if err != nil {
 		return
 	}
-	err = db.Model(&emails).Where("account_id = ?", accID).Where("folder_id = ?", folderID).Where("read_status=?", 0).Count(&news).Error
+	err = s.db.Model(&emails).Where("account_id = ?", accID).Where("folder_id = ?", folderID).Where("read_status=?", 0).Count(&news).Error
 	if err != nil {
 		return
 	}
@@ -42,11 +48,12 @@ func (s *LocalStorage) Query(accID, folderID int64, orderField, orderDir string,
 }
 
 // NewLocalStorage creates a new LocalStorage instance.
-func NewLocalStorage(appRoot, baseDir string) *LocalStorage {
+func NewLocalStorage(appRoot, baseDir string, db *gorm.DB) *LocalStorage {
 	return &LocalStorage{
 		AppRoot: appRoot,
 		BaseDir: baseDir,
 		lock:    sync.Mutex{},
+		db:      db,
 	}
 }
 

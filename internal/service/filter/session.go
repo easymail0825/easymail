@@ -3,8 +3,10 @@ package filter
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"easymail/internal/easylog"
 	"easymail/internal/model"
+	"easymail/internal/observability/sessiontrace"
 	"easymail/internal/preprocessing"
 	"easymail/internal/service/milter"
 	"easymail/vender/spf"
@@ -52,6 +54,9 @@ type Session struct {
 	bodyData   []byte // mail bodyData
 	_log       *easylog.Logger
 	html2Text  *preprocessing.Html2Text
+
+	tracer sessiontrace.Tracer
+	span   sessiontrace.Session
 }
 
 func NewSession(conn net.Conn, filter *Filter, _log *easylog.Logger, html2Text *preprocessing.Html2Text) *Session {
@@ -70,6 +75,10 @@ func NewSession(conn net.Conn, filter *Filter, _log *easylog.Logger, html2Text *
 		_log:       _log,
 		html2Text:  html2Text,
 	}
+}
+
+func (s *Session) SetTracer(t sessiontrace.Tracer) {
+	s.tracer = t
 }
 
 // ReadPacket reads incoming milter packet
@@ -498,6 +507,11 @@ func (s *Session) Handle() {
 		if err != nil {
 			log.Printf("Error closing connection: %v\n", err)
 		}
+		if s.span != nil {
+			s.span.End("disconnect", map[string]any{
+				"features_cnt": len(s.features),
+			})
+		}
 		s._log = nil
 		s.headers = nil
 		s.macros = nil
@@ -509,11 +523,23 @@ func (s *Session) Handle() {
 		s.html2Text = nil
 	}(s.conn)
 
+	if s.tracer != nil {
+		s.span = s.tracer.NewSession(context.Background(), sessiontrace.SessionMeta{
+			Protocol: sessiontrace.ProtocolMilter,
+			Remote:   s.conn.RemoteAddr().String(),
+			Local:    s.conn.LocalAddr().String(),
+		})
+		s.span.Event("connect", nil)
+	}
+
 	for {
 		msg, err := s.ReadPacket()
 		if err != nil {
 			if err != io.EOF {
 				log.Printf("Error reading milter command: %v\n", err)
+			}
+			if s.span != nil {
+				s.span.Error("read_packet", err, nil)
 			}
 			return
 		}
@@ -523,6 +549,11 @@ func (s *Session) Handle() {
 			if err != errCloseSession {
 				// log error condition
 				log.Printf("Error performing milter command: %v\n", err)
+			}
+			if s.span != nil && err != errCloseSession {
+				s.span.Error("process", err, map[string]any{
+					"code": string([]byte{msg.Code}),
+				})
 			}
 			return
 		} else {
@@ -551,6 +582,13 @@ func (s *Session) Handle() {
 				}
 			}
 			fmt.Printf("result is %v\n", result)
+			if s.span != nil {
+				s.span.Event("rule_eval", map[string]any{
+					"action": int(result.Action),
+					"rule_id": result.RuleID,
+					"feature_cnt": len(s.features),
+				})
+			}
 			if result.RuleID > 0 {
 				switch result.Action {
 				case model.FilterActionAccept:
